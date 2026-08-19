@@ -83,7 +83,7 @@ Os dados das planilhas operacionais e do ZIP de relatórios foram processados co
 * `sintese_recusas`: Contém ocorrências e motivos de recusas de mercadorias.
 * `pedidos_vtex`: Logs originais extraídos da plataforma VTEX.
 
-#### 2.2 Agente Roteador de Intenções (`integracao_fase4.py`)
+#### 2.2 Agente Roteador de Intenções (`integracao.py`)
 
 Responsável por classificar a pergunta do operador logo no início do fluxo. Ele utiliza um modelo de linguagem ágil para identificar a intenção do usuário entre:
 * **`STATUS_PEDIDO`:** Consultas focadas em rastreamento, status de trânsito ou intercorrências de um pedido específico.
@@ -109,7 +109,7 @@ Baseado em técnicas de Engenharia de Prompt. Este agente recebe os dados logís
 1. **Redação Empática:** Aplica empatia em atrasos, termos informativos em trânsito no prazo, proatividade e urgência em intercorrências/extravios e celebração em entregas concluídas.
 2. **Tom de Voz e Restrições Rígidas:** Garante a ausência total de emojis para manter um tom de comunicação corporativo limpo no WhatsApp e adapta a saudação para utilizar estritamente o primeiro nome do destinatário.
 
-#### 2.6 Camada de Classificação Lógica Determinística e Robustez (`integracao_fase4.py`)
+#### 2.6 Camada de Classificação Lógica Determinística e Robustez (`integracao.py`)
 
 Para alcançar confiabilidade de nível de produção (*production-ready*), o sistema adota práticas avançadas de Engenharia de IA Híbrida:
 

@@ -15,7 +15,7 @@ import time
 import pandas as pd
 import json
 from agent_sql import executar_como_agente, executar_como_chain
-from integracao_fase4 import pipeline_completo
+from integracao import pipeline_completo
 
 # Configuração da Página e Estilos CSS Modernos
 st.set_page_config(page_title="TCC - Agente IA Logístico", page_icon="📦", layout="wide")
