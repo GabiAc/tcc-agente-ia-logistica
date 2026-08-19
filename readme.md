@@ -8,13 +8,14 @@
 
 Trabalho apresentado ao curso [BI MASTER](https://ica.puc-rio.ai/bi-master) da Pontifícia Universidade Católica do Rio de Janeiro (PUC-Rio) como pré-requisito para conclusão de curso e obtenção de crédito na disciplina "Projetos de Sistemas Inteligentes de Apoio à Decisão".
 
-* **Código do Projeto:** [Link para o repositório](.) <!-- Insira o link do seu GitHub quando subir o código -->
+* **Código do Projeto:** [Link para o repositório](https://github.com/GabiAc/tcc-agente-ia-logistica) <!-- Insira o link do seu GitHub quando subir o código -->
 
 \---
 
 ### Resumo
 
 Este trabalho apresenta o desenvolvimento de um sistema inteligente multi-agente voltado à otimização da gestão logística e do atendimento ao cliente em operações de e-commerce. A solução consolida dados transacionais e logísticos provenientes de múltiplas fontes (VTEX, Intelipost, sistemas de recusas e faturamento) em uma base SQLite unificada. Utilizando a biblioteca LangChain integrada a modelos de linguagem da família GPT-OSS (via API do Groq), foi arquitetado um pipeline dividido em duas frentes: um **Agente SQL** especializado, responsável por traduzir perguntas de usuários em consultas SQLite estruturadas e extrair dados sem alucinações, e um **Agente Analista/Redator**, encarregado de classificar o status da entrega sob a ótica das regras de negócios logísticos e redigir comunicações personalizadas e profissionais. Para elevar a robustez sistêmica no ecossistema real de Engenharia de IA, foram implementados mecanismos de memória de curto prazo para resolução de contexto/pronomes, regex flexíveis de parsing, e guardrails anti-alucinação capazes de bloquear o fluxo de atendimento quando dados inconsistentes são localizados. Os resultados demonstram a viabilidade prática e a alta eficácia da inteligência artificial generativa na automação de notificações personalizadas por canais omnichannel como WhatsApp, e-mail e alertas corporativos via Slack.
+
 ---
 ### Abstract
 
