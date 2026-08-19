@@ -83,25 +83,33 @@ Os dados das planilhas operacionais e do ZIP de relatórios foram processados co
 * `sintese_recusas`: Contém ocorrências e motivos de recusas de mercadorias.
 * `pedidos_vtex`: Logs originais extraídos da plataforma VTEX.
 
-#### 2.2 Trilha: Agente de Dados Autônomo (`agent_sql.py`)
+#### 2.2 Agente Roteador de Intenções (`integracao_fase4.py`)
+
+Responsável por classificar a pergunta do operador logo no início do fluxo. Ele utiliza um modelo de linguagem ágil para identificar a intenção do usuário entre:
+* **`STATUS_PEDIDO`:** Consultas focadas em rastreamento, status de trânsito ou intercorrências de um pedido específico.
+* **`CONSULTA_GERAL`:** Relatórios administrativos corporativos (ex: listas de CPFs, quantidade total de entregas) ou auditoria de tabelas. 
+
+Caso o roteador identifique uma `CONSULTA_GERAL`, ele desvia o fluxo e ativa o pipeline administrativo, exibindo apenas as tabelas internas na tela e bloqueando o envio de mensagens simuladas de WhatsApp/E-mail para clientes finais.
+
+#### 2.3 Trilha: Agente de Dados Autônomo (`agent_sql.py`)
 
 Utiliza o `create_sql_agent` do LangChain com suporte a chamadas de ferramentas (*tool calling*).
 
 * **Memória de Curto Prazo:** Injetou-se o histórico das duas últimas mensagens trocadas, permitindo a correta interpretação de perguntas sequenciais (ex: o usuário pergunta pelo pedido X e, em seguida, pergunta *"ele está atrasado?"* – a IA reconhece que o pronome "ele" se refere ao pedido X citado anteriormente).
 * **Dicionário de Dados no Prompt:** Define explicitamente regras como a caracterização matemática de atraso e o uso obrigatório de aspas duplas no SQLite para colunas contendo espaços (ex: `"Previsão Entrega Cliente"`).
 
-#### 2.3 Trilha: Pipeline Direto (`agent_sql.py`)
+#### 2.4 Trilha: Pipeline Direto (`agent_sql.py`)
 
 Uma abordagem mais leve utilizando LangChain Expression Language (LCEL) onde o modelo menor (GPT-OSS 20B) gera apenas a query SQL estruturada a partir do schema das tabelas. O script Python executa localmente a query e retorna a visualização crua dos dados, economizando tokens e mantendo alta agilidade.
 
-#### 2.4 Agente Analista e Redator (`agent_analista.py`)
+#### 2.5 Agente Analista e Redator (`agent_analista.py`)
 
 Baseado em técnicas de Engenharia de Prompt. Este agente recebe os dados logísticos do pedido e a classificação de status pré-determinada, executando a redação final do texto de atendimento e a síntese analítica:
 
 1. **Redação Empática:** Aplica empatia em atrasos, termos informativos em trânsito no prazo, proatividade e urgência em intercorrências/extravios e celebração em entregas concluídas.
 2. **Tom de Voz e Restrições Rígidas:** Garante a ausência total de emojis para manter um tom de comunicação corporativo limpo no WhatsApp e adapta a saudação para utilizar estritamente o primeiro nome do destinatário.
 
-#### 2.5 Camada de Classificação Lógica Determinística e Robustez (`integracao_fase4.py`)
+#### 2.6 Camada de Classificação Lógica Determinística e Robustez (`integracao_fase4.py`)
 
 Para alcançar confiabilidade de nível de produção (*production-ready*), o sistema adota práticas avançadas de Engenharia de IA Híbrida:
 
@@ -113,7 +121,7 @@ Para alcançar confiabilidade de nível de produção (*production-ready*), o si
 * **Guardrail de Segurança SQL e Erros:** Proteção em nível de query que intercepta comandos que não começam com `SELECT` ou `WITH` e redirecionamento automático de falhas na execução do SQLite para a interface Streamlit em formato técnico (`SEM_DADOS`), evitando alucinação de cópias de atendimento.
 * **Parser de Formato e Omnichannel (`mock_channels.py`):** Expressões regulares isolam o raciocínio interno do analista da mensagem do cliente, despachando-os respectivamente para WhatsApp, E-mail e alertas internos de logística do Slack.
 
-#### 2.6 Arquitetura de Roteamento Dinâmico e Modo Híbrido (LLM vs SLM)
+#### 2.7 Arquitetura de Roteamento Dinâmico e Modo Híbrido (LLM vs SLM)
 
 O painel Streamlit permite alternar entre três modos de modelo na Groq (com mapeamento transparente de compatibilidade incorporado):
 
