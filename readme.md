@@ -180,8 +180,12 @@ O projeto comprova que a arquitetura de **Sistemas Multi-Agente** reduz expressi
 
 **Lições Aprendidas:**
 
-* A inclusão de um guardrail lógico na junção entre os dois agentes é vital para sistemas produtivos, garantindo que o agente redator não crie informações falsas de prazos ou códigos de rastreio caso a consulta ao banco venha em branco.
-* A engenharia de prompts voltada à estruturação do dicionário de dados (especificamente o uso de aspas para o dialeto SQLite) foi crucial para manter a estabilidade sintática do gerador de queries.
+* **Classificação Lógica Determinística vs. Alucinação:** A inclusão de um guardrail lógico em Python na junção entre os dois agentes é vital para sistemas produtivos, garantindo que o agente redator não crie informações falsas de prazos ou códigos de rastreio caso a consulta ao banco venha em branco.
+* **Engenharia de Prompt e Dialeto SQL:** A engenharia de prompts voltada à estruturação do dicionário de dados (especificamente o uso de aspas para o dialeto SQLite) foi crucial para manter a estabilidade sintática do gerador de queries.
+* **Comportamento de Modelos por Porte (LLM vs. SLM):** Modelos menores (SLMs - 20B) são excelentes para geração rápida de texto estruturado, mas apresentam falhas em obedecer a restrições negativas rigorosas (como a proibição de emojis ou remoção de assinaturas genéricas). Modelos maiores (LLMs - 120B) oferecem raciocínio lógico muito superior para queries complexas e inferências sutis (como compreender descrições detalhadas de transportadoras).
+* **O Perigo do Over-Binding em Memória Conversacional:** Em fluxos com histórico de chat, reescritores de queries tendem a associar arbitrariamente buscas amplas de nomes (ex: buscar "Thiago") a IDs de pedidos mostrados na tela anterior. A definição de instruções estritas de busca ampla (Anti-Binding) é mandatória para evitar buscas excessivamente restritas.
+* **Privacidade de Dados (LGPD) e Sanitização Dinâmica:** Informações logísticas reais comumente contêm e-mails e telefones de assistentes e clientes finais. Uma camada de tratamento via expressões regulares (Regex) aplicada diretamente no retorno do banco de dados protege a integridade e privacidade das informações antes do processamento pela IA, sem alterar a base original.
+* **Segurança e Guardrails de Query SQL:** Sistemas expostos a inputs livres de usuários devem conter guardrails de execução de queries que bloqueiem sumariamente comandos de alteração de dados (`DROP`, `DELETE`, `UPDATE`, `INSERT`), permitindo apenas o dialeto de leitura (`SELECT`/`WITH`).
 
 **Trabalhos Futuros:**
 
