@@ -159,18 +159,18 @@ O sistema funciona de forma inteiramente dinâmica para toda a base de dados int
 
 Durante os testes de validação em lote no app Streamlit, foi realizada uma comparação de latência média e estabilidade entre a execução utilizando o modelo monolítico de raciocínio de alta performance (`GPT-OSS 120B`) para todo o pipeline versus a **Arquitetura Híbrida** recomendada (Roteamento Dinâmico: SQL com `120B` + Redator com `20B`):
 
-| Cenário de Teste | Monolítico (GPT-OSS 120B) | Híbrido (120B + 20B) | Ganho de Velocidade |
-| :--- | :--- | :--- | :--- |
-| **Cenário 1:** Entregue com Atraso | 5.75s | 6.94s | Estável |
-| **Cenário 2:** Entregue no Prazo | 6.64s | 6.99s | Estável |
-| **Cenário 3:** Em Trânsito com Atraso | 28.23s | 8.04s | **~250% mais rápido** |
-| **Cenário 4:** Em Trânsito no Prazo | 37.99s | 9.88s | **~280% mais rápido** |
-| **Cenário 5:** Guardrail Pedido Inexistente | 8.70s | 1.97s | **~340% mais rápido** |
+| Cenário de Teste | Monolítico (120B) | Monolítico (20B) | Híbrido (120B + 20B) | Ganho Híbrido vs. Monolítico (20B) |
+| :--- | :--- | :--- | :--- | :--- |
+| **Cenário 1:** Entregue com Atraso | 5.75s | 7.00s | 6.94s | Estável |
+| **Cenário 2:** Entregue no Prazo | 6.64s | 16.71s | 6.99s | **~140% mais rápido** |
+| **Cenário 3:** Em Trânsito com Atraso | 28.23s | 35.97s | 8.04s | **~350% mais rápido** |
+| **Cenário 4:** Em Trânsito no Prazo | 37.99s | 36.62s | 9.88s | **~270% mais rápido** |
+| **Cenário 5:** Guardrail Pedido Inexistente | 8.70s | *Rate Limit (Erro 429)* | 1.97s | **Bypass Completo / Instantâneo** |
 
 **Discussão Técnica dos Resultados:**
-* **Gargalos de API e Rate Limits:** Em execuções em lote consecutivas, o modelo monolítico (120B) atinge rapidamente os limites de *Tokens por Minuto* (TPM) das APIs (especialmente no plano de testes gratuito da Groq). Isso força o framework (LangChain) a executar pausas de re-tentativa com espera (*backoff*), inflando artificialmente os tempos de resposta para 28-38 segundos.
-* **Vantagem do Híbrido:** Ao delegar a redação final do texto para o modelo de 20B (que é muito mais leve e possui cotas de tokens separadas e mais rápidas), evitamos as re-tentativas automáticas da API. O tempo de resposta mantém-se estável abaixo de 10 segundos, demonstrando excelente viabilidade de engenharia para sistemas reais de produção.
-* **Atalho de Guardrail:** No Cenário 5, com a intercepção de dados vazios pelo Guardrail, a chamada ao Agente Redator é pulada. Na arquitetura híbrida, isso reduziu a execução para apenas **1.97s**, pois somente uma requisição ágil ao Agente SQL foi feita.
+* **Gargalos de API e Rate Limits (Erro 429):** Em execuções em lote consecutivas, os modelos monolíticos atingem rapidamente os limites de *Tokens por Minuto* (TPM) ou *Tokens por Dia* (TPD) no plano de testes gratuito. Conforme demonstrado nos testes práticos, o modelo de 20B monolítico estourou sua cota diária (TPD) ao carregar esquemas e dicionários de dados de forma redundante em cada chamada, resultando em bloqueio (Erro 429) no Cenário 5.
+* **Vantagem do Híbrido:** Ao modularizar a extração lógica no modelo 120B e delegar a redação final do texto para o modelo de 20B apenas após o processamento determinístico do Python, o tempo de resposta se manteve estável abaixo de 10 segundos e evitou-se os limites de cota da API.
+* **Atalho de Guardrail:** No Cenário 5, a intercepção lógica de dados vazios pelo Guardrail em Python eliminou a chamada de redação do agente, completando a execução em apenas **1.97s** no modo híbrido (um ganho de tempo e tokens expressivo frente ao travamento por Rate Limit do modelo monolítico).
 
 ---
 
