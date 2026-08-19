@@ -185,21 +185,21 @@ with tab_chat:
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"].replace("$", "\\$"))
-            if "fase4_data" in msg:
+            if "pipeline_data" in msg:
                 # Exibição organizada dos metadados e agentes
                 with st.expander("🔍 Etapa 1: Dados Brutos do Banco (Agente SQL)"):
-                    st.text(msg["fase4_data"]["dados_brutos"])
+                    st.text(msg["pipeline_data"]["dados_brutos"])
                 with st.expander("🧠 Etapa 2: Análise Interna & CoT (Agente Analista)"):
-                    st.text(msg["fase4_data"]["resposta_analista"])
+                    st.text(msg["pipeline_data"]["resposta_analista"])
                 
-                tipo_consulta = msg["fase4_data"].get("tipo_consulta", "STATUS_PEDIDO")
+                tipo_consulta = msg["pipeline_data"].get("tipo_consulta", "STATUS_PEDIDO")
                 
                 if tipo_consulta == "STATUS_PEDIDO":
                     st.markdown("### 📢 Canais Omnichannel Disparados:")
                     
                     # Renderização dos Cards customizados
-                    msg_cliente = msg["fase4_data"]["mensagem_cliente"]
-                    email_dest = extrair_email(msg["fase4_data"]["dados_brutos"])
+                    msg_cliente = msg["pipeline_data"]["mensagem_cliente"]
+                    email_dest = extrair_email(msg["pipeline_data"]["dados_brutos"])
                     
                     # Card do WhatsApp
                     st.markdown(f"""
@@ -238,7 +238,7 @@ with tab_chat:
                 st.markdown(f"""
                 <div class="slack-card">
                     <div class="slack-header">💬 ALERTA LOGÍSTICA (SLACK #logistica-alertas)</div>
-                    <pre style="background: transparent; border: none; font-size: 0.95em; white-space: pre-wrap; margin:0; padding:0; color:#2c2c2c;">{msg["fase4_data"]["resposta_analista"]}</pre>
+                    <pre style="background: transparent; border: none; font-size: 0.95em; white-space: pre-wrap; margin:0; padding:0; color:#2c2c2c;">{msg["pipeline_data"]["resposta_analista"]}</pre>
                 </div>
                 """, unsafe_allow_html=True)
 
@@ -320,7 +320,7 @@ with tab_chat:
                         st.session_state.messages.append({
                             "role": "assistant", 
                             "content": f"{resposta}\n\n{resultados['resposta_analista']}",
-                            "fase4_data": resultados
+                            "pipeline_data": resultados
                         })
                     elif "Autônomo" in trilha:
                         historico = st.session_state.messages[:-1]
