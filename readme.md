@@ -54,14 +54,17 @@ graph TD
     B --> C{Escolha da Arquitetura}
     C -->|Agente de Dados Autônomo| D[Agente SQL - GPT-OSS 120B]
     C -->|Pipeline Direto| E[Prompt Template + GPT-OSS 20B]
-    C -->|Sistema Multi-Agente| F[Pipeline Multi-Agente]
+    C -->|Sistema Multi-Agente| F[Agente Roteador de Intenções]
     
-    F --> G[Agente 1: SQL Extraction]
+    F -->|STATUS_PEDIDO| G[Agente 1: SQL Extraction]
+    F -->|CONSULTA_GERAL| J2[Visualização Interna / Relatório]
+    
     G -->|Query SQLite| H[(banco_tcc.db)]
-    H -->|Dados Brutos / View| I{Guardrail Anti-Alucinação}
+    H -->|Dados Brutos| I{Guardrail e Verificador de Ambiguidade}
     
-    I -->|Dados Vazios| J[Retorna Alerta Controlado / Curto-circuito]
-    I -->|Dados Válidos| K[Agente 2: Analista / Redator]
+    I -->|Erro / Sem Dados| J[Retorna Alerta Controlado / Curto-circuito]
+    I -->|Múltiplos Pedidos| J2
+    I -->|Pedido Único Válido| K[Agente 2: Analista / Redator]
     
     K -->|Mensagem Formatada| L[Parser de Conteúdo]
     L --> M[Omnichannel Dispatcher]
