@@ -8,7 +8,7 @@
 
 Trabalho apresentado ao curso [BI MASTER](https://ica.puc-rio.ai/bi-master) da Pontifícia Universidade Católica do Rio de Janeiro (PUC-Rio) como pré-requisito para conclusão de curso e obtenção de crédito na disciplina "Projetos de Sistemas Inteligentes de Apoio à Decisão".
 
-* **Código do Projeto:** [Link para o repositório](https://github.com/GabiAc/tcc-agente-ia-logistica) <!-- Insira o link do seu GitHub quando subir o código -->
+* **Código do Projeto:** [Link para o repositório](https://github.com/GabiAc/tcc-agente-ia-logistica)
 
 \---
 
