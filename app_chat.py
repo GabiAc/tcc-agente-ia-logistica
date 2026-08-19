@@ -155,8 +155,7 @@ st.sidebar.info(
     "* **GPT-OSS 20B (Limitações):** Possui cota estrita de tokens/minuto (TPM) na API da Groq. Consultas robustas ao banco de dados que leem esquemas de tabelas podem exceder esse limite temporariamente."
 )
 
-# Caixa de texto onde o usuário digita (declarada no nível raiz para flutuar no rodapé)
-pergunta = st.chat_input("Pergunte algo (Ex: Qual o status do pedido FCN-1635681090149-01 considerando hoje como 2026-06-15?)")
+
 
 # Divisão de Abas: Chat interativo e Validador de Cenários
 tab_chat, tab_cenarios = st.tabs(["💬 Chat de Atendimento", "🧪 Validador de Cenários (Batch Test)"])
@@ -242,6 +241,9 @@ with tab_chat:
                     <pre style="background: transparent; border: none; font-size: 0.95em; white-space: pre-wrap; margin:0; padding:0; color:#2c2c2c;">{msg["fase4_data"]["resposta_analista"]}</pre>
                 </div>
                 """, unsafe_allow_html=True)
+
+    # Caixa de texto onde o usuário digita (declarada dentro da tab para não aparecer no validador de cenários)
+    pergunta = st.chat_input("Pergunte algo (Ex: Qual o status do pedido FCN-1635681090149-01 considerando hoje como 2026-06-15?)")
 
     # O processamento da pergunta digitada é feito aqui dentro da tab para renderizar os spinners e respostas no lugar certo
     if pergunta:
