@@ -172,6 +172,448 @@ Durante os testes de validação em lote no app Streamlit, foi realizada uma com
 * **Vantagem do Híbrido:** Ao modularizar a extração lógica no modelo 120B e delegar a redação final do texto para o modelo de 20B apenas após o processamento determinístico do Python, o tempo de resposta se manteve estável abaixo de 10 segundos e evitou-se os limites de cota da API.
 * **Atalho de Guardrail:** No Cenário 5, a intercepção lógica de dados vazios pelo Guardrail em Python eliminou a chamada de redação do agente, completando a execução em apenas **1.97s** no modo híbrido (um ganho de tempo e tokens expressivo frente ao travamento por Rate Limit do modelo monolítico).
 
+#### 3.4 Exemplos Reais de Execução e Artefatos do Pipeline
+
+Abaixo são apresentados dois casos reais de execução de tráfego de ponta a ponta pelo pipeline do sistema, demonstrando como a inteligência dos agentes interage com as regras determinísticas e guardrails do projeto:
+
+---
+
+### **Exemplo 1: Fluxo de Atendimento Logístico a Pedido Único (Intercorrência)**
+
+Este cenário demonstra a conversão de uma pergunta direta sobre um pedido específico com problemas de transporte até a geração da mensagem final sem emojis para o cliente:
+
+1. **Pergunta Inicial do Operador (Linguagem Natural):**
+   > *"Como está o status de entrega do pedido FCN-1643401105419-01? Considere hoje como sendo 2026-06-15."*
+
+2. **Query SQL Gerada pelo Agente SQL (GPT-OSS 120B):**
+   ```sql
+   SELECT r.*, p.*, rec.*
+   FROM rastreio_intelipost r
+   LEFT JOIN sintese_pedidos p ON p."Pedido" = r."Pedido de Venda"
+   LEFT JOIN sintese_recusas rec ON rec."Pedido" = r."Pedido de Venda"
+   WHERE r."Pedido de Venda" = 'FCN-1643401105419-01';
+   ```
+
+3. **Dados Brutos Retornados (Formato JSON SQLite do Banco de Dados - Resumido):**
+   *(Nota: As consultas reais no banco contêm mais de 70 campos. Para manter a clareza e concisão no relatório, os dados brutos abaixo foram resumidos apenas com as colunas essenciais analisadas pelo pipeline).*
+   ```json
+   [
+     {
+       "Nome do Destinatário": "Samantha Helena",
+       "Canal de Vendas": "Site",
+       "Cidade do Destinatário": "Campinas",
+       "UF": "SP",
+       "CEP do destinatário": "13058-013",
+       "Pedido de Venda": "FCN-1643401105419-01",
+       "Pedido": "FCN-1643401105419-01",
+       "Código de rastreio": "1wvfVlkNc6000092400115",
+       "Transportadora": "Eu entrego",
+       "Status Transportador": "Averiguar falha na entrega",
+       "Descrição Transportador": "Fora de abrangência",
+        "Data Entrega": null,
+        "Previsão Entrega Cliente": "2026-07-01 23:59:59",
+        "e-mail Destinatário": "sa***to@gmail.com",
+        "Celular Destinatário": "+55 19 9****-**69",
+        "Pagina Rastreamento": "https://status.ondeestameupedido.com/tracking/ce3ca707628190a058d92e5c220e229d7653518d"
+      }
+    ]
+   ```
+   *(Visualização real da extração da query SQL no painel Streamlit):*
+   ![Interface Principal e Query SQL](chatbot_3.png)
+
+4. **Saída Estruturada com Raciocínio Interno e Mensagem Final do Cliente (Retornada pelo Agente Redator):**
+   ```text
+   ---
+   [CLASSIFICAÇÃO]: INTERCORRÊNCIA/EXTRAVIO
+   [ANÁLISE INTERNA]: Pedido: FCN-1643401105419-01 | Transportadora/Seller: Eu entrego | Previsão: 2026-07-01 23:59:59 | Status Atual: Averiguar falha na entrega | Detalhe Status: Fora de abrangência | Raciocínio: A transportadora não entregou no endereço do destinatário, pois está fora da área de cobertura, e a carga será devolvida ao remetente.
+   
+   [MENSAGEM PARA O CLIENTE]:
+   Olá Samantha, lamentamos informar que houve uma intercorrência no fluxo de entrega do seu pedido FCN-1643401105419-01. A transportadora informou que o endereço está fora da área de cobertura, o que impede a entrega. Nossa equipe de logística já está investigando o caso e tomará as medidas necessárias para resolver a situação. Agradecemos sua compreensão e pedimos desculpas pelo transtorno.
+   ---
+   ```
+   *(Visualização real da interação de chat e canais simulados disparados):*
+   ![Interação Conversacional e Logs do Agente](chatbot_1.png)
+   ![Canais Omnichannel Disparados](chatbot_2.png)
+
+---
+
+### **Exemplo 2: Resolução de Ambiguidade por Busca Ampla ("Thiago")**
+
+Este cenário demonstra o funcionamento do **Guardrail de Ambiguidade**. Quando o operador faz uma pergunta contendo termos genéricos como apenas o nome *"Thiago"* (sem especificar o ID), a consulta do Agente SQL retorna múltiplos clientes diferentes. O pipeline intercepta esses dados, impede o disparo errôneo de comunicações para o WhatsApp de terceiros e redireciona o fluxo para um painel administrativo com opções de refino:
+
+1. **Pergunta Inicial do Operador (Linguagem Natural):**
+   > *"Busque o pedido do Thiago"*
+
+2. **Query SQL Gerada pelo Agente SQL (GPT-OSS 120B):**
+   ```sql
+   SELECT r.*, p.*, rec.*
+   FROM sintese_pedidos p
+   LEFT JOIN rastreio_intelipost r ON p."Pedido" = r."Pedido"
+   LEFT JOIN sintese_recusas rec ON p."Pedido" = rec."Pedido"
+   WHERE p."Cliente" LIKE '%Thiago%';
+   ```
+   *(Visualização real da query gerada no painel):*
+   ![Busca Ampla com Ambiguidade](Ambiguidade_1.png)
+
+
+3. **Intercepção do Guardrail de Ambiguidade (Código Python em `integracao.py`):**
+   O script verifica que o resultado retornou mais de um pedido com IDs distintos (ex: Thiago Maciel, THIAGO FERNANDES, Thiago Rodrigues). O status da resposta do analista é redirecionado para `CONSULTA_GERAL` (administrativa).
+
+4. **Visualização do Operador na Interface Chatbot:**
+   ```text
+   [CONSULTA ADMINISTRATIVA / DADOS AMBÍGUOS]
+   
+   🔍 Foram encontrados **77 pedidos** associados a este termo no banco de dados.
+   
+   Por favor, refine a sua pergunta informando o **ID do Pedido** específico ou o **Nome Completo** do cliente.
+   
+   **Pedidos Encontrados:**
+   - 👤 **Thiago Maciel** | ID do Pedido: `FCN-1636321090965-01` | Status: `Entregue`
+   - 👤 **Thiago Rodrigues** | ID do Pedido: `FCN-1636511091299-01` | Status: `Entregue`
+   - 👤 **THIAGO FERNANDES** | ID do Pedido: `FCN-1636691091549-01` | Status: `Entregue`
+   - 👤 **THIAGO FRATINI ALBUQUERQUE GONCALVES** | ID do Pedido: `FCN-1637 9****-**55-01` | Status: `Entregue`
+   - 👤 **Thiago Rodrigues** | ID do Pedido: `FCN-1636731091649-01` | Status: `Entregue`
+   - 👤 **THIAGO PALHARES** | ID do Pedido: `FCN-1637631093353-01` | Status: `Entregue`
+   - 👤 **THIAGO MACEDO** | ID do Pedido: `FCN-1637141092433-01` | Status: `Entregue`
+   - 👤 **THIAGO TAVARES** | ID do Pedido: `FCN-1637391092870-01` | Status: `Entregue`
+   - ... e outros 69 pedidos encontrados com o nome especificado.
+   ```
+   *(Visualização real da lista de ambiguidade no painel e logs do Slack):*
+   ![Resultado Ambiguidade 77 Pedidos](Ambiguidade_2.png)
+   ![Logs Internos Slack Ambiguidade](Ambiguidade_3.png)
+   
+   *Nota: O envio de WhatsApp/E-mail simulado para clientes é totalmente bloqueado nesta etapa para evitar incidentes operacionais.*
+
+5. **Refinamento Conversacional Parcial (Operador):**
+   Ao ver a lista de 77 opções, o operador digita um nome mais específico:
+   > *"Thiago Fernandes"*
+
+6. **Query SQL Gerada pela IA para o Nome Parcial:**
+   ```sql
+   SELECT r.*, p.*, rec.*
+   FROM sintese_pedidos p
+   LEFT JOIN rastreio_intelipost r ON p."Pedido" = r."Pedido"
+   LEFT JOIN sintese_recusas rec ON p."Pedido" = rec."Pedido"
+   WHERE p."Cliente" LIKE '%Thiago Fernandes%';
+   ```
+   *(Visualização real da query de busca por nome parcial):*
+   ![Busca Refinada Thiago Fernandes](Ambiguidade_4.png)
+
+
+7. **Dados Brutos Retornados (SQLite - Contém 2 Pedidos Diferentes):**
+   *(Nota: O banco de dados contém duas pessoas diferentes que atendem à busca "Thiago Fernandes": `THIAGO FERNANDES` de Uberlândia e `THIAGO FERNANDES DA SILVA MONTEIRO` do Rio de Janeiro).*
+   ```json
+   [
+     {
+       "Nome do Destinatário": "THIAGO FERNANDES",
+       "Pedido de Venda": "FCN-1636691091549-01",
+       "Cidade do Destinatário": "UBERLANDIA",
+       "UF": "MG",
+       "Transportadora": "J&T Express",
+       "Status Transportador": "Entregue"
+     },
+     {
+       "Nome do Destinatário": "THIAGO FERNANDES DA SILVA MONTEIRO",
+       "Pedido de Venda": "FCN-1638891096057-02",
+       "Cidade do Destinatário": "RIO DE JANEIRO",
+       "UF": "RJ",
+       "Transportadora": "J&T Express",
+       "Status Transportador": "Entregue"
+     }
+   ]
+   ```
+
+8. **Nova Intercepção do Guardrail de Ambiguidade:**
+   Como a busca por "Thiago Fernandes" ainda retornou 2 pedidos diferentes, o sistema de segurança intercepta novamente a resposta, classifica-a como `CONSULTA_GERAL` (administrativa) e instrui o atendente a selecionar o ID exato:
+   ```text
+   [CONSULTA ADMINISTRATIVA / DADOS AMBÍGUOS]
+   
+   🔍 Foram encontrados **2 pedidos** associados a este termo no banco de dados.
+   
+   Por favor, refine a sua pergunta informando o **ID do Pedido** específico ou o **Nome Completo** do cliente.
+   
+   **Pedidos Encontrados:**
+   - 👤 **THIAGO FERNANDES** | ID do Pedido: `FCN-1636691091549-01` | Status: `Entregue`
+   - 👤 **THIAGO FERNANDES DA SILVA MONTEIRO** | ID do Pedido: `FCN-1638891096057-02` | Status: `Entregue`
+   ```
+   *(Visualização real das 2 opções restantes no painel):*
+   ![Resultado Ambiguidade 2 Pedidos](Ambiguidade_5.png)
+
+
+9. **Seleção Definitiva e Atendimento (Operador):**
+   O operador digita o ID exato do pedido desejado:
+   > *"Como está o status de entrega do pedido FCN-1636691091549-01? Considere hoje como sendo 2026-06-15."*
+
+10. **Query SQL Direta Gerada pelo Agente SQL (GPT-OSS 120B):**
+    ```sql
+    SELECT r.*, p.*, rec.*
+    FROM rastreio_intelipost r
+    LEFT JOIN sintese_pedidos p ON p."Pedido" = r."Pedido de Venda"
+    LEFT JOIN sintese_recusas rec ON rec."Pedido" = r."Pedido de Venda"
+    WHERE r."Pedido de Venda" = 'FCN-1636691091549-01';
+    ```
+    *(Visualização real do query de busca exata por ID):*
+    ![Busca Direta por ID do Pedido](Ambiguidade_6.png)
+
+
+11. **Dados Brutos Retornados (SQLite - Registro Único e Mascarado LGPD):**
+    ```json
+    [
+      {
+        "Nome do Destinatário": "THIAGO FERNANDES",
+        "Canal de Vendas": "Site",
+        "Cidade do Destinatário": "UBERLANDIA",
+        "UF": "MG",
+        "CEP do destinatário": "38405-140",
+        "Pedido de Venda": "FCN-1636691091549-01",
+        "Pedido": "FCN-1636691091549-01",
+        "Código de rastreio": "888030745062132",
+        "Transportadora": "J&T Express",
+        "Status Transportador": "Entregue",
+        "Data Entrega": "2026-06-08 18:23:00",
+        "Previsão Entrega Cliente": "2026-06-15 23:59:59",
+        "e-mail Destinatário": "th***es@gmail.com",
+        "Celular Destinatário": "+55 34 9****-**16"
+      }
+    ]
+    ```
+
+12. **Saída Estruturada e Mensagem de Atendimento para o Cliente (Agente Redator):**
+    ```text
+    ---
+    [CLASSIFICAÇÃO]: ENTREGUE NO PRAZO
+    [ANÁLISE INTERNA]: Pedido: FCN-1636691091549-01 | Transportadora/Seller: J&T Express | Previsão: 2026-06-15 | Status Atual: Entregue | Detalhe Status: N/A | Raciocínio: O pedido foi entregue com sucesso dentro do prazo no dia 08/06/2026.
+    
+    [MENSAGEM PARA O CLIENTE]:
+    Olá Thiago, gostaríamos de confirmar que o seu pedido foi entregue com sucesso no dia 08/06/2026. Agradecemos a sua preferência e esperamos que tenha gostado da sua experiência de compra.
+    ---
+    ```
+    *(Visualização real da análise interna do Analista e dos canais simulados disparados):*
+    ![Logs Analista Thiago Fernandes](Ambiguidade_7.png)
+    ![Disparos Omnichannel Thiago Fernandes](Ambiguidade_8.png)
+
+
+---
+
+### **Exemplo 3: Integração de Recusa Prévia de Estoque com Entrega Final no Prazo**
+
+Este cenário destaca a inteligência de negócios do pipeline omnichannel: o pedido `FCN-1638871095971-01` do cliente Diego sofreu uma recusa inicial por falta de estoque físico na primeira loja física às 11:08h do dia 15/06/2026. O sistema omnichannel re-roteou o pedido para outro centro de distribuição, que realizou o faturamento e despacho às 12:15h. A entrega foi concluída no prazo em 22/06/2026. 
+
+O sistema consolida a recusa do seller e a entrega via `LEFT JOIN` automatizado, e o Agente Analista documenta o ocorrido internamente para a logística enquanto envia a confirmação de entrega normal para o cliente:
+
+1. **Pergunta Inicial do Operador (Linguagem Natural):**
+   > *"Qual o status de entrega e histórico do pedido FCN-1638871095971-01?"*
+
+2. **Query SQL Gerada pelo Agente SQL (GPT-OSS 120B) integrando recusas:**
+   ```sql
+   SELECT r.*, sr.*
+   FROM rastreio_intelipost r
+   LEFT JOIN sintese_recusas sr
+     ON r."Pedido de Venda" = sr."Pedido"
+   WHERE r."Pedido de Venda" = 'FCN-1638871095971-01';
+   ```
+
+3. **Dados Brutos Retornados (Formato JSON SQLite consolidando tabelas - Resumido):**
+   *(Nota: Por conta do join de tabelas, o resultado cru contém mais de 75 colunas. Para manter a clareza e concisão no relatório, o JSON abaixo foi resumido mostrando apenas as colunas-chave utilizadas na classificação).*
+   ```json
+   [
+     {
+       "Nome do Destinatário": "DIEGO BEZERRA DE SANTANA",
+       "Canal de Vendas": "Site",
+       "Cidade do Destinatário": "RECIFE",
+       "UF": "PE",
+       "CEP do destinatário": "51020-280",
+       "Pedido de Venda": "FCN-1638871095971-01",
+       "Pedido": "FCN-1638871095971-01",
+       "Transportadora": "Total Express",
+       "Status Transportador": "Entregue",
+       "Data Entrega": "2026-06-22 15:15:06",
+       "Previsão Entrega Cliente": "2026-06-24 23:59:59",
+       "e-mail Destinatário": "di***a_@hotmail.com",
+       "Celular Destinatário": "+55 81 9****-**14",
+       "Motivo Recusa": "SEM ESTOQUE",
+       "Data Hora Recusa": "15/06/2026 11:08:12"
+     }
+   ]
+   ```
+   *(Visualização real da query e dos dados brutos com o join de recusa):*
+   ![Query SQL de Recusas e Entrega](Recusas_1.png)
+
+
+4. **Saída Estruturada com Raciocínio Interno de Integração e Mensagem Final (Agente Redator):**
+   ```text
+   ---
+   [CLASSIFICAÇÃO]: ENTREGUE NO PRAZO
+   [ANÁLISE INTERNA]: Pedido: FCN-1638871095971-01 | Transportadora/Seller: Total | Previsão: 2026-06-24 23:59:59 | Status Atual: Entregue | Detalhe Status: Recusado inicialmente por SEM ESTOQUE | Raciocínio: Pedido recusado inicialmente por falta de estoque, mas faturado novamente e entregue em 22/06/2026
+   
+   [MENSAGEM PARA O CLIENTE]:
+   Olá Diego, temos boas notícias! Seu pedido FCN-1638871095971-01 já foi entregue com sucesso em 22/06/2026. Agradecemos por escolher nossa loja e esperamos que você aproveite sua nova sandália. Se precisar de algo, estamos à disposição.
+   ---
+   ```
+   *(Visualização real da análise CoT e dos canais simulados de WhatsApp e E-mail disparados):*
+   ![Análise de Negócio do Analista](Recusas_2.png)
+   ![Confirmação de Entrega Enviada](Recusas_3.png)
+
+
+---
+
+### **Exemplo 4: Memória Conversacional e Resolução de Pronomes no Chat**
+
+Este cenário demonstra a robustez da **Memória de Curto Prazo (Conversational Memory)** do chatbot. Quando um operador faz perguntas encadeadas usando pronomes ou termos vagos como *"ele"* ou *"desse pedido"*, o reescritor de perguntas integrado resolve a ambiguidade com base nas últimas respostas do chat antes de realizar a consulta no SQLite:
+
+1. **Primeira Pergunta do Histórico (Operador):**
+   > *"Qual a previsão de entrega do pedido FCN-1638871095971-01?"*
+   * (A IA responde que a previsão é 24/06/2026 e o status atual é 'Entregue'.)
+
+2. **Segunda Pergunta (Referência Ambígua com Pronome):**
+   > *"Ele foi entregue com atraso?"*
+
+3. **Etapa de Reescrita de Pergunta (Código Python em `integracao.py`):**
+   O pipeline intercepta a entrada, passa o histórico da conversa pelo modelo de reescrita conversacional e resolve a ambiguidade transformando a pergunta vaga em uma consulta direta independente:
+   - **Pergunta Reescrevida pelo Agente:** *"O pedido FCN-1638871095971-01 foi entregue com atraso?"*
+
+4. **Query SQL Gerada pelo Agente SQL (GPT-OSS 120B):**
+   ```sql
+   SELECT "Data Entrega", "Previsão Entrega Cliente", "Status Transportador" 
+   FROM "rastreio_intelipost" 
+   WHERE "Pedido de Venda" = 'FCN-1638871095971-01';
+   ```
+
+5. **Dados Brutos Retornados (Formato JSON SQLite):**
+   ```json
+   [
+     {
+       "Data Entrega": "2026-06-22 15:15:06",
+       "Previsão Entrega Cliente": "2026-06-24 23:59:59",
+       "Status Transportador": "Entregue"
+     }
+   ]
+   ```
+
+6. **Resposta Final do Agente no Chat:**
+   > *"Não, o pedido FCN-1638871095971-01 foi entregue dentro do prazo. A entrega ocorreu no dia 22/06/2026, enquanto a previsão limite do cliente era para o dia 24/06/2026."*
+
+---
+
+#### 3.5 Interface do Painel Streamlit (Screenshots)
+
+Para facilitar a auditoria visual da interface de negócios, adicione aqui os screenshots do seu ambiente de execução:
+
+* **Interface Principal e Query SQL Extraída em Tempo Real (Etapa 1):**
+  ![Interface Principal e Query SQL](chatbot_3.png)
+
+* **Interação Conversacional em Tempo Real e Logs dos Agentes (SQL e Analista):**
+  ![Interação Conversacional em Tempo Real](chatbot_1.png)
+
+* **Canais Omnichannel Disparados Simulações (WhatsApp, E-mail e Slack):**
+  ![Canais Omnichannel Disparados](chatbot_2.png)
+
+* **Demonstração do Guardrail de Ambiguidade - Turno 1: Busca Inicial por "Thiago" (Exemplo 2):**
+  ![Busca Ampla com Ambiguidade](Ambiguidade_1.png)
+
+* **Demonstração do Guardrail de Ambiguidade - Turno 1: Resultado de 77 Pedidos (Exemplo 2):**
+  ![Resultado Ambiguidade 77 Pedidos](Ambiguidade_2.png)
+
+* **Demonstração do Guardrail de Ambiguidade - Turno 1: Logs Internos no Alerta do Slack (Exemplo 2):**
+  ![Logs Internos Slack Ambiguidade](Ambiguidade_3.png)
+
+* **Demonstração do Guardrail de Ambiguidade - Turno 2: Busca por "Thiago Fernandes" (Exemplo 2):**
+  ![Busca Refinada Thiago Fernandes](Ambiguidade_4.png)
+
+* **Demonstração do Guardrail de Ambiguidade - Turno 2: Resultado de 2 Pedidos (Exemplo 2):**
+  ![Resultado Ambiguidade 2 Pedidos](Ambiguidade_5.png)
+* **Demonstração do Guardrail de Ambiguidade - Turno 3: Busca por ID "FCN-1636691091549-01" (Exemplo 2):**
+  ![Busca Direta por ID do Pedido](Ambiguidade_6.png)
+
+* **Demonstração do Guardrail de Ambiguidade - Turno 3: Logs da Resposta do Analista (Exemplo 2):**
+  ![Logs Analista Thiago Fernandes](Ambiguidade_7.png)
+
+* **Demonstração do Guardrail de Ambiguidade - Turno 3: Canais WhatsApp e E-mail Disparados (Exemplo 2):**
+  ![Disparos Omnichannel Thiago Fernandes](Ambiguidade_8.png)
+
+* **Integração de Recusa e Entrega (Exemplo 3) - Query SQL com Join de Recusas (Etapa 1):**
+  ![Query SQL de Recusas e Entrega](Recusas_1.png)
+
+* **Integração de Recusa e Entrega (Exemplo 3) - Análise de Negócio e CoT (Etapa 2):**
+  ![Análise de Negócio do Analista](Recusas_2.png)
+
+* **Integração de Recusa e Entrega (Exemplo 3) - Confirmação de Entrega Enviada (WhatsApp/E-mail):**
+  ![Disparos Omnichannel Exemplo Recusa](Recusas_3.png)
+
+#### 3.6 Definição das Regras e Prompts do Sistema
+
+A integridade sintática e a robustez dos agentes foram garantidas por meio de prompts estruturados em formato Chain-of-Thought (CoT), detalhados a seguir:
+
+1. **Prompt do Agente SQL (Text-to-SQL):**
+   Define regras matemáticas de classificação de status, convenções sintáticas do SQLite, lógica de tratamento de prefixos e regras para tratamento de pronomes.
+   * *Código de Implementação:* [`agent_sql.py`](agent_sql.py#L49-L70).
+   * *Prompt Utilizado:*
+     ```text
+     Dada a pergunta do usuário, o Dicionário de Dados e o schema do banco de dados abaixo, escreva UMA query SQLite válida para responder à pergunta. 
+     Retorne APENAS a query SQL em texto puro, sem a palavra "sql", sem formatação markdown ou crases.
+     
+     DICIONÁRIO DE DADOS E REGRAS:
+     - DATA ATUAL DE HOJE (Padrão): O banco de dados é um snapshot de Junho de 2026. Se a pergunta não mencionar explicitamente uma data atual, ASSUMA SEMPRE que a data atual é '2026-06-15'.
+     - ID do Pedido: Na tabela 'sintese_pedidos' e 'sintese_recusas', o ID do pedido fica na coluna "Pedido". Na tabela 'rastreio_intelipost', fica na coluna "Pedido de Venda".
+     - Fonte da Verdade do Rastreio: É sempre a tabela 'rastreio_intelipost' (NÃO use pedidos_vtex para status de trânsito ou rastreio).
+     - Pedidos em Trânsito: "Status Transportador" na tabela 'rastreio_intelipost' diferente de 'Entregue' e diferente de 'Cancelado'.
+     - Pedidos Atrasados: "Previsão Entrega Cliente" < a data atual (ou a simulada '2026-06-15') E "Status Transportador" diferente de 'Entregue' e diferente de 'Cancelado'.
+     - Entregue com Atraso (Entregue Fora do Prazo): Ocorre quando "Status Transportador" é igual a 'Entregue' E a data em "Data Entrega" é maior que "Previsão Entrega Cliente" (ambas formatadas como YYYY-MM-DD).
+     - Entregue no Prazo: Ocorre quando "Status Transportador" é igual a 'Entregue' E a data em "Data Entrega" é menor ou igual à "Previsão Entrega Cliente".
+     - Intercorrência: Ocorre quando "Status Transportador" for 'Falha na entrega', 'Falha ao criar pedido com a transportadora' ou 'Averiguar falha na entrega'.
+     - SELEÇÃO DE COLUNAS: Ao buscar um pedido ou o último pedido para análise de atendimento, a query SQL deve obrigatoriamente trazer TODAS as colunas (`SELECT *` ou trazer "Pedido de Venda", "Status Transportador", "Descrição Transportador", "Previsão Entrega Cliente", "Pagina Rastreamento", "e-mail Destinatário", "Celular Destinatário") e NÃO apenas a coluna de ID.
+     
+     ATENÇÃO/REGRAS DE SQL:
+     - BUSCA DE TEXTOS (LIKE): Sempre que filtrar por nomes de pessoas, clientes, cidades ou transportadoras na cláusula WHERE (ex: filtro de cliente), utilize o operador LIKE com curingas (ex: p."Cliente" LIKE '%Thiago%') em vez do operador de igualdade (=).
+     - Colunas que possuem espaços no nome DEVEM ser envolvidas em aspas duplas na query (Ex: "Pedido de Venda").
+     - ORDENAÇÃO DE DATAS NO SQLITE: As colunas "Data Hora Recusa" ou "Data" podem estar salvas como texto no formato 'DD/MM/YYYY'. Ordene cronologicamente usando substring: ORDER BY substr("Data Hora Recusa", 7, 4) || '-' || substr("Data Hora Recusa", 4, 2) || '-' || substr("Data Hora Recusa", 1, 2) DESC.
+     - INTEGRAÇÃO DE RECUSAS NO STATUS: Ao buscar dados de status de um pedido específico, tente sempre incluir/trazer informações da tabela sintese_recusas correspondentes àquele pedido se elas estiverem (ex: fazendo um LEFT JOIN ou incluindo em consultas juntas), para sabermos se o pedido sofreu recusa prévia de seller antes de ser faturado/entregue.
+     ```
+
+2. **Prompt do Agente Analista e Redator (Copywriting):**
+   Define tom de voz empático, persona de suporte sênior, proibição de emojis e saudação baseada estritamente no primeiro nome.
+   * *Código de Implementação:* [`agent_analista.py`](agent_analista.py#L21-L52).
+   * *Prompt Utilizado:*
+     ```text
+     Você é um Agente de Atendimento ao Cliente de E-commerce sênior.
+     Sua missão é receber os dados logísticos de um pedido, a classificação de status já determinada pelo sistema e escrever uma mensagem humanizada para o cliente.
+     
+     INSTRUÇÕES DE TOM DE VOZ E MENSAGEM:
+     - Se a classificação for 'EM TRÂNSITO NO PRAZO', use um tom informativo e animador, avisando que o pedido está a caminho.
+     - Se a classificação for 'EM TRÂNSITO COM ATRASO', peça desculpas sinceras pelo atraso e informe que o pedido está a caminho.
+     - Se a classificação for 'INTERCORRÊNCIA/EXTRAVIO', informe que houve uma intercorrência no fluxo de entrega, peça desculpas e informe que a equipe de logística está investigando o caso ativamente para resolver.
+     - Se a classificação for 'DEVOLVIDO/FALHA', informe explicitamente que houve um problema/falha na tentativa de entrega, peça desculpas sinceras e informe que o suporte entrará em contato para organizar o reenvio ou reembolso. NUNCA diga que o pedido está "atrasado" ou "a caminho".
+     - Se a classificação for 'ENTREGUE NO PRAZO' ou 'ENTREGUE COM ATRASO', use um tom de celebração confirmando que foi entregue.
+     
+     ATENÇÃO AO MOTIVO DO PROBLEMA:
+     - Se os dados indicarem que houve uma Recusa inicial (campo 'Motivo Recusa' presente) mas o status atual no transportador é 'Entregue' ou 'Em Trânsito': você DEVE colocar a recusa no campo 'Detalhe Status' (Ex: "Recusado inicialmente por SEM ESTOQUE") e relatar todo o ocorrido de forma explicativa no 'Raciocínio'.
+     
+     Não utilize emojis em hipótese alguma. Importante: utilize apenas o PRIMEIRO NOME do cliente ao saudá-lo na mensagem.
+     ```
+
+3. **Prompt do Agente Roteador de Intenções (Intent Routing):**
+   Garante a separação entre consultas logísticas de clientes e consultas gerais ou comandos técnicos.
+   * *Código de Implementação:* [`integracao.py`](integracao.py#L128-L136).
+   * *Prompt Utilizado:*
+     ```text
+     Você é um classificador de intenção especializado em sistemas de e-commerce e logística.
+     Analise a pergunta do usuário e classifique-a em uma das duas intenções abaixo:
+     
+     - STATUS_PEDIDO: Se o usuário estiver perguntando especificamente sobre o status de entrega, atraso, previsão, rastreamento ou dados de atendimento de um pedido de cliente específico, ou realizando uma busca pelo nome ou sobrenome do cliente (ex: "O pedido X está atrasado?", "Busque o status do pedido Y", "Qual a previsão do pedido Z?", "Thiago Fernandes", "Samantha Helena", "Busque o pedido do Thiago").
+     - CONSULTA_GERAL: Se o usuário estiver fazendo uma consulta de dados administrativos gerais, lista de CPFs da base toda, contagem total de pedidos da base, esquema das tabelas, injeções de comandos, saudações de chat gerais ou qualquer pergunta técnica/relatório corporativo amplo.
+     ```
+
+4. **Prompt do Reescritor Conversacional (Conversational Query Rephraser):**
+   Reescreve entradas ambíguas do chat baseado nas últimas interações, aplicando regras de Anti-Binding.
+   * *Código de Implementação:* [`integracao.py`](integracao.py#L157-L165).
+   * *Prompt Utilizado:*
+     ```text
+     Dada uma conversa de chat logística de e-commerce entre um Atendente Humano e um Assistente de Inteligência Artificial, e uma nova pergunta subsequente do atendente, reescreva esta nova pergunta para ser uma consulta standalone (independente), que contenha todo o contexto necessário para que um resolvedor SQL a execute sem precisar olhar para o histórico da conversa.
+     
+     Instruções Rígidas de Anti-Binding:
+     - Se o histórico da conversa mencionou anteriormente um pedido (ID ou cliente) mas a nova pergunta se refere a uma pessoa ou pedido diferente (ex: "E o pedido da Samantha?", "Busque o Thiago"), você NÃO deve herdar as informações (como número de pedido ou dados do cliente antigo) na reescrita. A pergunta reescrita deve focar estritamente na nova busca mencionada.
+     - Não tente fundir dados de pedidos antigos na nova consulta de busca ampla.
+     ```
 ---
 
 ### 4\. Conclusões

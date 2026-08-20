@@ -14,6 +14,10 @@ load_dotenv()
 db_path = r"c:\Users\gabri\OneDrive\Documentos\Pós - BI\TCC - pós\banco_tcc.db"
 db = SQLDatabase.from_uri(f"sqlite:///{db_path}")
 
+# Variável global para armazenar a última query SQL gerada pela IA
+LAST_GENERATED_SQL = "Nenhuma query gerada ainda."
+
+
 def get_llm(model_name="openai/gpt-oss-20b"):
     from langchain_groq import ChatGroq
     # Mapeia dinamicamente modelos deprecados para novos ativos caso passem o nome antigo
@@ -151,6 +155,10 @@ def executar_como_chain(pergunta: str, model_name="openai/gpt-oss-20b"):
     # Limpeza básica caso o modelo ainda retorne crases markdown teimosamente
     query_limpa = query_gerada.replace("```sql", "").replace("```", "").strip()
     print(f"-> Query SQL Gerada pela IA:\n{query_limpa}\n")
+    
+    # Atualiza a variável global com a última query
+    global LAST_GENERATED_SQL
+    LAST_GENERATED_SQL = query_limpa
     
     # Passo B: O sistema (Python) executa a query no banco de dados com segurança
     print("-> Executando query no banco...")

@@ -157,6 +157,9 @@ st.sidebar.info(
 
 
 
+# Caixa de texto onde o usuário digita (declarada no nível raiz para flutuar no rodapé)
+pergunta = st.chat_input("Pergunte algo (Ex: Qual o status do pedido FCN-1635681090149-01 considerando hoje como 2026-06-15?)")
+
 # Divisão de Abas: Chat interativo e Validador de Cenários
 tab_chat, tab_cenarios = st.tabs(["💬 Chat de Atendimento", "🧪 Validador de Cenários (Batch Test)"])
 
@@ -188,6 +191,10 @@ with tab_chat:
             if "pipeline_data" in msg:
                 # Exibição organizada dos metadados e agentes
                 with st.expander("🔍 Etapa 1: Dados Brutos do Banco (Agente SQL)"):
+                    if "query_sql" in msg["pipeline_data"]:
+                        st.markdown("**Query SQL Gerada pela IA:**")
+                        st.code(msg["pipeline_data"]["query_sql"], language="sql")
+                        st.markdown("**Dados Brutos Retornados:**")
                     st.text(msg["pipeline_data"]["dados_brutos"])
                 with st.expander("🧠 Etapa 2: Análise Interna & CoT (Agente Analista)"):
                     st.text(msg["pipeline_data"]["resposta_analista"])
@@ -242,9 +249,6 @@ with tab_chat:
                 </div>
                 """, unsafe_allow_html=True)
 
-    # Caixa de texto onde o usuário digita (declarada dentro da tab para não aparecer no validador de cenários)
-    pergunta = st.chat_input("Pergunte algo (Ex: Qual o status do pedido FCN-1635681090149-01 considerando hoje como 2026-06-15?)")
-
     # O processamento da pergunta digitada é feito aqui dentro da tab para renderizar os spinners e respostas no lugar certo
     if pergunta:
         # 1. Adiciona a pergunta do usuário na tela
@@ -265,6 +269,10 @@ with tab_chat:
                         
                         # Mostra os expanders informativos
                         with st.expander("🔍 Etapa 1: Dados Brutos do Banco (Agente SQL)"):
+                            if "query_sql" in resultados:
+                                st.markdown("**Query SQL Gerada pela IA:**")
+                                st.code(resultados["query_sql"], language="sql")
+                                st.markdown("**Dados Brutos Retornados:**")
                             st.text(resultados["dados_brutos"])
                         with st.expander("🧠 Etapa 2: Análise Interna & CoT (Agente Analista)"):
                             st.text(resultados["resposta_analista"])

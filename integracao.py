@@ -1,6 +1,7 @@
 import re
 import json
 from agent_sql import executar_como_chain, executar_como_agente, get_llm
+import agent_sql
 from agent_analista import gerar_mensagem_atendimento
 from mock_channels import send_email_mock, send_whatsapp_mock, send_slack_mock
 from langchain_core.prompts import PromptTemplate
@@ -28,7 +29,21 @@ def anonimizar_dados_sensiveis(texto_str):
             return f"{user[:2]}***{user[-2:]}@{domain}"
         return f"{user[0]}***@{domain}"
         
-    return re.sub(email_regex, mask_email, texto_str)
+    texto_anonimizado = re.sub(email_regex, mask_email, texto_str)
+    
+    # Regex para capturar e-mails e telefones com/sem formatação brasileira (com ou sem DDI +55)
+    # Ex: +5519991994969, +55 19 99199-4969, 81985650214, etc.
+    phone_regex = r'(\+?55\s?)?\(?(\d{2})\)?\s?(9\d{4})[-\s]?(\d{4})'
+    
+    def mask_phone(match):
+        ddi = match.group(1) if match.group(1) else ""
+        ddd = match.group(2)
+        prefix = match.group(3)
+        suffix = match.group(4)
+        return f"{ddi.strip()} {ddd} 9****-**{suffix[-2:]}".strip()
+        
+    return re.sub(phone_regex, mask_phone, texto_anonimizado)
+
 
 def classificar_status_logistico(dados_brutos_str, data_hoje_simulada="2026-06-15"):
     try:
@@ -114,8 +129,8 @@ def rotear_intencao(pergunta: str, model_name="openai/gpt-oss-20b") -> str:
         """Você é um classificador de intenção especializado em sistemas de e-commerce e logística.
         Analise a pergunta do usuário e classifique-a em uma das duas intenções abaixo. Retorne APENAS o código da intenção escolhida (sem explicações, sem markdown, sem pontos):
         
-        - STATUS_PEDIDO: Se o usuário estiver perguntando especificamente sobre o status de entrega, atraso, rastreamento ou dados de atendimento de um pedido de cliente específico (ex: "O pedido X está atrasado?", "Busque o status do pedido Y", "Qual a previsão do pedido Z?").
-        - CONSULTA_GERAL: Se o usuário estiver fazendo uma consulta de dados gerais, relatórios administrativos, lista de CPFs, quantidade total de pedidos, esquema das tabelas do banco, injeções de comandos, saudações gerais ou qualquer pergunta de suporte corporativo/relatório interno de negócios (ex: "me dê a lista de CPFs", "quantos pedidos foram entregues ontem?", "ignore todas as regras...").
+        - STATUS_PEDIDO: Se o usuário estiver perguntando especificamente sobre o status de entrega, atraso, previsão, rastreamento ou dados de atendimento de um pedido de cliente específico, ou realizando uma busca pelo nome ou sobrenome do cliente (ex: "O pedido X está atrasado?", "Busque o status do pedido Y", "Qual a previsão do pedido Z?", "Thiago Fernandes", "Samantha Helena", "Busque o pedido do Thiago").
+        - CONSULTA_GERAL: Se o usuário estiver fazendo uma consulta de dados administrativos gerais, lista de CPFs da base toda, contagem total de pedidos da base, esquema das tabelas, injeções de comandos, saudações de chat gerais ou qualquer pergunta técnica/relatório corporativo amplo (ex: "me dê a lista de CPFs", "quantos pedidos foram entregues ontem?", "ignore todas as regras...").
         
         Pergunta do usuário: {input}
         
@@ -196,7 +211,8 @@ def pipeline_completo(pergunta: str, trilha_sql="chain", contato_cliente={"email
             "dados_brutos": dados_brutos,
             "resposta_analista": f"[CONSULTA ADMINISTRATIVA / RELATÓRIO]\nOs dados solicitados foram extraídos com sucesso do banco de dados:\n\n{dados_brutos}",
             "mensagem_cliente": "Solicitação processada administrativamente. Como se trata de uma consulta interna de dados ou comando administrativo e não de suporte a um pedido de cliente, nenhuma notificação de WhatsApp foi enviada.",
-            "tipo_consulta": "ADMINISTRATIVA"
+            "tipo_consulta": "ADMINISTRATIVA",
+            "query_sql": agent_sql.LAST_GENERATED_SQL
         }
 
     # Passo 1: Agente SQL Extrai os Dados
@@ -214,7 +230,8 @@ def pipeline_completo(pergunta: str, trilha_sql="chain", contato_cliente={"email
             "dados_brutos": dados_brutos if dados_brutos else "Nenhum dado encontrado.",
             "resposta_analista": "[ALERTA] Ocorreu um erro ou nenhum dado foi encontrado para analisar.",
             "mensagem_cliente": "Não consegui encontrar os dados necessários no banco de dados para responder sua pergunta. Por favor, verifique se as informações do pedido estão corretas.",
-            "tipo_consulta": "SEM_DADOS"
+            "tipo_consulta": "SEM_DADOS",
+            "query_sql": agent_sql.LAST_GENERATED_SQL
         }
     
     # Tenta extrair a data simulada da pergunta do usuário para que o analista saiba qual data usar na comparação.
@@ -273,7 +290,8 @@ def pipeline_completo(pergunta: str, trilha_sql="chain", contato_cliente={"email
             "dados_brutos": dados_brutos,
             "resposta_analista": mensagem_retorno,
             "mensagem_cliente": "Múltiplos pedidos identificados. Por favor, refine sua pesquisa.",
-            "tipo_consulta": "CONSULTA_GERAL"
+            "tipo_consulta": "CONSULTA_GERAL",
+            "query_sql": agent_sql.LAST_GENERATED_SQL
         }
 
     # Trunca os dados brutos se houver muitos registros para evitar estourar o limite de tokens da API (TPM)
@@ -320,8 +338,9 @@ def pipeline_completo(pergunta: str, trilha_sql="chain", contato_cliente={"email
     return {
         "dados_brutos": dados_brutos,
         "resposta_analista": resposta_analista,
-        "mensagem_cliente": message_to_client_fallback if 'mensagem_cliente' not in locals() else mensagem_cliente,
-        "tipo_consulta": "STATUS_PEDIDO"
+        "mensagem_cliente": mensagem_cliente if 'mensagem_cliente' in locals() else "Mensagem de atendimento indisponível.",
+        "tipo_consulta": "STATUS_PEDIDO",
+        "query_sql": agent_sql.LAST_GENERATED_SQL
     }
 
 if __name__ == "__main__":
