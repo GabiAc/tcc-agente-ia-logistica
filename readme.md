@@ -459,22 +459,22 @@ O sistema consolida a recusa do seller e a entrega via `LEFT JOIN` automatizado,
 
 ### **Exemplo 4: Memória Conversacional e Resolução de Pronomes no Chat**
 
-Este cenário demonstra a robustez da **Memória de Curto Prazo (Conversational Memory)** do chatbot. Quando um operador faz perguntas encadeadas usando pronomes ou termos vagos como *"ele"* ou *"desse pedido"*, o reescritor de perguntas integrado resolve a ambiguidade com base nas últimas respostas do chat antes de realizar a consulta no SQLite:
+Este cenário demonstra a robustez da **Memória de Curto Prazo (Conversational Memory)** do chatbot. Quando um operador faz perguntas encadeadas usando pronomes ou termos vagos como *"ele"* ou *"dele"*, o reescritor de perguntas integrado resolve a ambiguidade com base nas últimas respostas do chat antes de realizar a consulta no SQLite:
 
 1. **Primeira Pergunta do Histórico (Operador):**
-   > *"Qual a previsão de entrega do pedido FCN-1638871095971-01?"*
-   * (A IA responde que a previsão é 24/06/2026 e o status atual é 'Entregue'.)
+   > *"Qual o valor do pedido FCN-1638871095971-01?"*
+   * *(A IA responde apenas sobre o valor financeiro na terceira pessoa: "O valor do pedido do cliente Diego de número FCN-1638871095971-01 é R$ 699,00." - Sem revelar qualquer informação ou log sobre o status de entrega do mesmo).*
 
-2. **Segunda Pergunta (Referência Ambígua com Pronome):**
-   > *"Ele foi entregue com atraso?"*
+2. **Segunda Pergunta (Referência Ambígua por Elipse/Subentendido):**
+   > *"O pedido foi entregue?"*
 
 3. **Etapa de Reescrita de Pergunta (Código Python em `integracao.py`):**
    O pipeline intercepta a entrada, passa o histórico da conversa pelo modelo de reescrita conversacional e resolve a ambiguidade transformando a pergunta vaga em uma consulta direta independente:
-   - **Pergunta Reescrevida pelo Agente:** *"O pedido FCN-1638871095971-01 foi entregue com atraso?"*
+   - **Pergunta Reescrevida pelo Agente:** *"O pedido FCN-1638871095971-01 foi entregue?"*
 
 4. **Query SQL Gerada pelo Agente SQL (GPT-OSS 120B):**
    ```sql
-   SELECT "Data Entrega", "Previsão Entrega Cliente", "Status Transportador" 
+   SELECT "Status Transportador", "Data Entrega" 
    FROM "rastreio_intelipost" 
    WHERE "Pedido de Venda" = 'FCN-1638871095971-01';
    ```
@@ -483,16 +483,25 @@ Este cenário demonstra a robustez da **Memória de Curto Prazo (Conversational 
    ```json
    [
      {
-       "Data Entrega": "2026-06-22 15:15:06",
-       "Previsão Entrega Cliente": "2026-06-24 23:59:59",
-       "Status Transportador": "Entregue"
+       "Status Transportador": "Entregue",
+       "Data Entrega": "2026-06-22 15:15:06"
      }
    ]
    ```
 
-6. **Resposta Final do Agente no Chat:**
-   > *"Não, o pedido FCN-1638871095971-01 foi entregue dentro do prazo. A entrega ocorreu no dia 22/06/2026, enquanto a previsão limite do cliente era para o dia 24/06/2026."*
-
+6. **Resposta Final do Agente no Chat (Voltada ao Operador):**
+   > *"O pedido do Diego de número FCN-1638871095971-01 foi entregue em 22/06/2026."*
+   
+   *(Visualização real da sequência de execução em 5 partes continuas):*
+   
+   **Turno 1: Consulta de valor do pedido**
+   ![Primeira Pergunta e Contexto](Memoria_1.png)
+   ![Logs e Alerta da Primeira Pergunta](Memoria_2.png)
+   
+   **Turno 2: Pergunta subsequente com pronome ("Ele já foi entregue?")**
+   ![Segunda Pergunta e Contexto](Memoria_3.png)
+   ![Disparo Omnichannel WhatsApp e E-mail da Segunda Pergunta](Memoria_4.png)
+   ![Logs de Auditoria e Alerta no Slack da Segunda Pergunta](Memoria_5.png)
 ---
 
 #### 3.5 Interface do Painel Streamlit (Screenshots)
@@ -540,6 +549,21 @@ Para facilitar a auditoria visual da interface de negócios, adicione aqui os sc
 * **Integração de Recusa e Entrega (Exemplo 3) - Confirmação de Entrega Enviada (WhatsApp/E-mail):**
   ![Disparos Omnichannel Exemplo Recusa](Recusas_3.png)
 
+* **Resolução Conversacional de Memória e Pronomes (Exemplo 4) - Turno 1 (Parte 1 - Chat):**
+  ![Primeira Pergunta da Conversa](Memoria_1.png)
+
+* **Resolução Conversacional de Memória e Pronomes (Exemplo 4) - Turno 1 (Parte 2 - Logs):**
+  ![Logs Internos Turno 1](Memoria_2.png)
+
+* **Resolução Conversacional de Memória e Pronomes (Exemplo 4) - Turno 2 (Parte 1 - Reescrita e Chat):**
+  ![Reescrita e Resposta com Pronome](Memoria_3.png)
+
+* **Resolução Conversacional de Memória e Pronomes (Exemplo 4) - Turno 2 (Parte 2 - Canais Cliente):**
+  ![WhatsApp e Email Turno 2](Memoria_4.png)
+
+* **Resolução Conversacional de Memória e Pronomes (Exemplo 4) - Turno 2 (Parte 3 - Slack):**
+  ![Slack Logs Turno 2](Memoria_5.png)
+
 #### 3.6 Definição das Regras e Prompts do Sistema
 
 A integridade sintática e a robustez dos agentes foram garantidas por meio de prompts estruturados em formato Chain-of-Thought (CoT), detalhados a seguir:
@@ -568,17 +592,24 @@ A integridade sintática e a robustez dos agentes foram garantidas por meio de p
      - Colunas que possuem espaços no nome DEVEM ser envolvidas em aspas duplas na query (Ex: "Pedido de Venda").
      - ORDENAÇÃO DE DATAS NO SQLITE: As colunas "Data Hora Recusa" ou "Data" podem estar salvas como texto no formato 'DD/MM/YYYY'. Ordene cronologicamente usando substring: ORDER BY substr("Data Hora Recusa", 7, 4) || '-' || substr("Data Hora Recusa", 4, 2) || '-' || substr("Data Hora Recusa", 1, 2) DESC.
      - INTEGRAÇÃO DE RECUSAS NO STATUS: Ao buscar dados de status de um pedido específico, tente sempre incluir/trazer informações da tabela sintese_recusas correspondentes àquele pedido se elas estiverem (ex: fazendo um LEFT JOIN ou incluindo em consultas juntas), para sabermos se o pedido sofreu recusa prévia de seller antes de ser faturado/entregue.
+     - EVITE FILTROS CONDICIONAIS DINÂMICOS NO WHERE (CRÍTICO): Ao formular queries para responder a perguntas específicas sobre se um pedido foi entregue com atraso ou no prazo (ex: "ele foi entregue com atraso?"), filtre na cláusula WHERE apenas pelo identificador do pedido (ex: WHERE "Pedido de Venda" = 'FCN-XXXX'). NUNCA adicione filtros condicionais baseados na pergunta (como AND "Data Entrega" > "Previsão Entrega Cliente" ou AND "Status Transportador" = 'Entregue') na cláusula WHERE. Se você adicionar estes filtros e a condição for falsa, a query retornará vazia, impedindo o sistema de obter os dados do pedido. O banco deve retornar a linha do pedido, e a lógica de verificação de atraso/status será feita de forma determinística posteriormente pelo Agente Analista.
      ```
 
 2. **Prompt do Agente Analista e Redator (Copywriting):**
-   Define tom de voz empático, persona de suporte sênior, proibição de emojis e saudação baseada estritamente no primeiro nome.
+   Define a persona de suporte logístico sênior, o tom de voz empático de acordo com a ocorrência, a proibição absoluta de emojis, a higienização de nomes para saudações apenas pelo primeiro nome, e a estruturação de saudações nos dois formatos (resposta interna em 3ª pessoa para o operador e texto de WhatsApp em 2ª pessoa para o cliente).
    * *Código de Implementação:* [`agent_analista.py`](agent_analista.py#L21-L52).
    * *Prompt Utilizado:*
      ```text
      Você é um Agente de Atendimento ao Cliente de E-commerce sênior.
-     Sua missão é receber os dados logísticos de um pedido, a classificação de status já determinada pelo sistema e escrever uma mensagem humanizada para o cliente.
+     Sua missão é analisar os dados logísticos do pedido e a pergunta do operador, fornecendo duas mensagens distintas:
+     1. Uma resposta interna para o OPERADOR (Analista) na terceira pessoa, explicando de forma curta e natural o status do pedido.
+     2. Uma mensagem de suporte formal destinada ao CLIENTE na segunda pessoa (ex: "Olá [Primeiro Nome], seu pedido..."), adequada para ser disparada por WhatsApp ou E-mail.
      
-     INSTRUÇÕES DE TOM DE VOZ E MENSAGEM:
+     INSTRUÇÕES DE PERSPECTIVA E TOM DE VOZ:
+     - [MENSAGEM PARA O OPERADOR] (Interna - Balão do Chat): Fale na terceira pessoa sobre o cliente. Seja extremamente direto, curto e natural, respondendo exatamente à pergunta do operador.
+     - [MENSAGEM PARA O CLIENTE] (Externa - WhatsApp/E-mail): Fale na segunda pessoa direcionado ao cliente, saudando-o pelo primeiro nome. Siga as regras específicas de classificação (desculpas em atrasos/recusas, celebração em entregas).
+     
+     REGRAS DE CLASSIFICAÇÃO:
      - Se a classificação for 'EM TRÂNSITO NO PRAZO', use um tom informativo e animador, avisando que o pedido está a caminho.
      - Se a classificação for 'EM TRÂNSITO COM ATRASO', peça desculpas sinceras pelo atraso e informe que o pedido está a caminho.
      - Se a classificação for 'INTERCORRÊNCIA/EXTRAVIO', informe que houve uma intercorrência no fluxo de entrega, peça desculpas e informe que a equipe de logística está investigando o caso ativamente para resolver.
@@ -588,7 +619,7 @@ A integridade sintática e a robustez dos agentes foram garantidas por meio de p
      ATENÇÃO AO MOTIVO DO PROBLEMA:
      - Se os dados indicarem que houve uma Recusa inicial (campo 'Motivo Recusa' presente) mas o status atual no transportador é 'Entregue' ou 'Em Trânsito': você DEVE colocar a recusa no campo 'Detalhe Status' (Ex: "Recusado inicialmente por SEM ESTOQUE") e relatar todo o ocorrido de forma explicativa no 'Raciocínio'.
      
-     Não utilize emojis em hipótese alguma. Importante: utilize apenas o PRIMEIRO NOME do cliente ao saudá-lo na mensagem.
+     Não utilize emojis em hipótese alguma. Importante: ao saudar o cliente (apenas na resposta de fluxo amplo), utilize apenas o PRIMEIRO NOME dele.
      ```
 
 3. **Prompt do Agente Roteador de Intenções (Intent Routing):**
@@ -653,7 +684,7 @@ O sistema utiliza a API do **Groq** para interagir com os modelos da família GP
 
 #### 2\. Executar o Sistema (Windows)
 
-* Dê um duplo clique no arquivo **`Iniciar\_Chat.bat`**.
+* Dê um duplo clique no arquivo **`Iniciar_Chat.bat`**.
 
 > \*\*O que o script faz automaticamente na primeira execução:\*\*
 > \* Detecta se existe a pasta do ambiente virtual (`venv`). Se não existir, ele a cria automaticamente.
@@ -673,7 +704,7 @@ python -m venv venv
 
 # 2. Ative o ambiente virtual
 # no Windows:
-venv\\Scripts\\activate
+venv\Scripts\activate
 # no Linux/macOS:
 source venv/bin/activate
 
@@ -681,7 +712,7 @@ source venv/bin/activate
 pip install -r requirements.txt
 
 # 4. Inicie o Streamlit
-streamlit run app\_chat.py
+streamlit run app_chat.py
 ```
 
 \---

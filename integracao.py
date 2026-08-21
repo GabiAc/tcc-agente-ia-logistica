@@ -311,25 +311,47 @@ def pipeline_completo(pergunta: str, trilha_sql="chain", contato_cliente={"email
 
     # Passo 2: Agente Analista (Redator)
     print(f"\n>>> ETAPA 2: AGENTE 2 (ANALISTA) GERANDO A MENSAGEM com modelo: {analista_model}")
-    resposta_analista = gerar_mensagem_atendimento(dicionario_para_analista, classificacao_sistema=classificacao_sistema, model_name=analista_model)
+    resposta_analista = gerar_mensagem_atendimento(
+        dicionario_para_analista, 
+        classificacao_sistema=classificacao_sistema, 
+        pergunta_usuario=pergunta_final, 
+        model_name=analista_model
+    )
     print(f"\n[OUTPUT DO AGENTE 2]:\n{resposta_analista}\n")
 
-    # Passo 3: Parsing (Separar Mensagem do Cliente e Análise Interna)
+    # Passo 3: Parsing (Separar Mensagem do Operador e Mensagem do Cliente)
     print(">>> ETAPA 3: PARSING E DISTRIBUIÇÃO OMNICHANNEL")
     
-    # Extrair apenas a mensagem do cliente
-    mensagem_cliente = resposta_analista
+    mensagem_operador = "Resposta ao operador indisponível."
+    mensagem_cliente = "Mensagem ao cliente indisponível."
     
-    # Utilizar regex case-insensitive para extrair a mensagem do cliente
-    partes = re.split(r'(?i)mensagem para o cliente', resposta_analista)
-    if len(partes) > 1:
-        # Pega a última parte e limpa marcadores comuns de formatação
-        mensagem_cliente = partes[-1].strip(" *:\n\r[]-").strip().replace("---", "").strip()
+    # Extrair mensagem do operador
+    partes_operador = re.split(r'(?i)mensagem para o operador', resposta_analista)
+    if len(partes_operador) > 1:
+        conteudo_operador = partes_operador[1]
+        partes_cliente_split = re.split(r'(?i)mensagem para o cliente', conteudo_operador)
+        mensagem_operador = partes_cliente_split[0].strip(" *:\n\r[]-").strip().replace("---", "").strip()
+        
+    # Extrair mensagem do cliente
+    partes_cliente = re.split(r'(?i)mensagem para o cliente', resposta_analista)
+    if len(partes_cliente) > 1:
+        mensagem_cliente = partes_cliente[-1].strip(" *:\n\r[]-").strip().replace("---", "").strip()
+        
+    # Fallback caso não tenha sido gerado
+    if mensagem_operador == "Resposta ao operador indisponível.":
+        mensagem_operador = mensagem_cliente
 
-    # Disparar Canais Simulados
+    # Detecta se é uma consulta informativa/lookup que NÃO deve gerar disparo de canais para o cliente final
+    eh_lookup = False
+    perg_lower = pergunta.lower()
+    if any(palavra in perg_lower for palavra in ["previsão", "previsao", "atraso", "atrasado", "transportadora", "cep", "email", "e-mail", "celular", "telefone", "qual o", "qual a", "qual é", "quais"]):
+        eh_lookup = True
+
+    # Disparar Canais Simulados (Sempre usa a mensagem formatada para o cliente!)
     send_slack_mock(channel="logistica-alertas", message=resposta_analista)
-    send_email_mock(to_email=contato_cliente["email"], subject="Atualização sobre o seu pedido", message=mensagem_cliente)
-    send_whatsapp_mock(phone=contato_cliente["telefone"], message=mensagem_cliente)
+    if not eh_lookup:
+        send_email_mock(to_email=contato_cliente["email"], subject="Atualização sobre o seu pedido", message=mensagem_cliente)
+        send_whatsapp_mock(phone=contato_cliente["telefone"], message=mensagem_cliente)
 
     print("=====================================================")
     print("[SUCCESS] PIPELINE FINALIZADO COM SUCESSO!")
@@ -338,8 +360,9 @@ def pipeline_completo(pergunta: str, trilha_sql="chain", contato_cliente={"email
     return {
         "dados_brutos": dados_brutos,
         "resposta_analista": resposta_analista,
-        "mensagem_cliente": mensagem_cliente if 'mensagem_cliente' in locals() else "Mensagem de atendimento indisponível.",
-        "tipo_consulta": "STATUS_PEDIDO",
+        "mensagem_operador": mensagem_operador,
+        "mensagem_cliente": mensagem_cliente,
+        "tipo_consulta": "STATUS_LOOKUP" if eh_lookup else "STATUS_PEDIDO",
         "query_sql": agent_sql.LAST_GENERATED_SQL
     }
 

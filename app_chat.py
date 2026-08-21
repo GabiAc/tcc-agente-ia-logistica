@@ -137,7 +137,8 @@ trilha = st.sidebar.radio(
 # Seleção Dinâmica de LLMs
 modelo_opcao = st.sidebar.selectbox(
     "Selecione o Modelo de Linguagem (Groq):",
-    ("GPT-OSS 20B (Rápido e Eficiente)", "GPT-OSS 120B (Alta Performance Cognitiva)", "Híbrido (SQL com 120B + Redator com 20B)")
+    ("GPT-OSS 20B (Rápido e Eficiente)", "GPT-OSS 120B (Alta Performance Cognitiva)", "Híbrido (SQL com 120B + Redator com 20B)"),
+    index=2
 )
 
 # Map da opção visual para a chave real do modelo
@@ -236,6 +237,8 @@ with tab_chat:
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
+                elif tipo_consulta == "STATUS_LOOKUP":
+                    st.info("ℹ️ **Consulta Informativa:** A pergunta foi tratada como uma verificação de dados internos pelo atendente. Os canais de contato de WhatsApp ou E-mail para o cliente final não foram acionados.")
                 elif tipo_consulta == "SEM_DADOS":
                     st.warning("⚠️ **Dados não localizados:** O banco de dados retornou um resultado vazio. Nenhum canal de contato ao cliente (WhatsApp ou E-mail) foi acionado para evitar disparos com erro.")
                 else:
@@ -264,8 +267,9 @@ with tab_chat:
                         historico = st.session_state.messages[:-1]
                         resultados = pipeline_completo(pergunta, trilha_sql="chain", chat_history=historico, model_name=model_name)
                         
-                        resposta = f"*(Execução no fluxo **Sistema Multi-Agente Omnichannel** concluída usando o modelo {modelo_opcao}.)*"
-                        st.markdown(resposta)
+                        resposta_header = f"*(Execução no fluxo **Sistema Multi-Agente Omnichannel** concluída usando o modelo {modelo_opcao}.)*"
+                        st.markdown(resposta_header)
+                        st.markdown(resultados["mensagem_operador"])
                         
                         # Mostra os expanders informativos
                         with st.expander("🔍 Etapa 1: Dados Brutos do Banco (Agente SQL)"):
@@ -312,6 +316,8 @@ with tab_chat:
                                 </div>
                             </div>
                             """, unsafe_allow_html=True)
+                        elif tipo_consulta == "STATUS_LOOKUP":
+                            st.info("ℹ️ **Consulta Informativa:** A pergunta foi tratada como uma verificação de dados internos pelo atendente. Os canais de contato de WhatsApp ou E-mail para o cliente final não foram acionados.")
                         elif tipo_consulta == "SEM_DADOS":
                             st.warning("⚠️ **Dados não localizados:** O banco de dados retornou um resultado vazio. Nenhum canal de contato ao cliente (WhatsApp ou E-mail) foi acionado para evitar disparos com erro.")
                         else:
@@ -327,7 +333,7 @@ with tab_chat:
                         
                         st.session_state.messages.append({
                             "role": "assistant", 
-                            "content": f"{resposta}\n\n{resultados['resposta_analista']}",
+                            "content": f"{resposta_header}\n\n{resultados['mensagem_operador']}",
                             "pipeline_data": resultados
                         })
                     elif "Autônomo" in trilha:

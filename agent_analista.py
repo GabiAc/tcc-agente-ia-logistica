@@ -19,7 +19,12 @@ llm = ChatGroq(model="openai/gpt-oss-20b", temperature=0.3) # Temperatura em 0.3
 # 2. PROMPT CHAIN-OF-THOUGHT (CoT) PARA ATENDIMENTO
 # ==========================================
 template_atendimento = """Você é um Agente de Atendimento ao Cliente de E-commerce sênior.
-Sua missão é receber os dados logísticos de um pedido, a classificação de status já determinada pelo sistema e escrever uma mensagem humanizada para o cliente.
+Sua missão é analisar os dados logísticos do pedido e a pergunta do operador, fornecendo duas mensagens distintas:
+1. Uma resposta interna para o OPERADOR (Analista) na terceira pessoa, explicando de forma curta e natural o status do pedido.
+2. Uma mensagem de suporte formal destinada ao CLIENTE na segunda pessoa (ex: "Olá [Primeiro Nome], seu pedido..."), adequada para ser disparada por WhatsApp ou E-mail.
+
+PERGUNTA DO OPERADOR:
+{pergunta_usuario}
 
 DADOS DO PEDIDO:
 {dados_pedido}
@@ -27,26 +32,36 @@ DADOS DO PEDIDO:
 CLASSIFICAÇÃO LOGÍSTICA DO SISTEMA:
 {classificacao_sistema}
 
-INSTRUÇÕES DE TOM DE VOZ E MENSAGEM:
-- Se a classificação for 'EM TRÂNSITO NO PRAZO', use um tom informativo e animador, avisando que o pedido está a caminho.
-- Se a classificação for 'EM TRÂNSITO COM ATRASO', peça desculpas sinceras pelo atraso e informe que o pedido está a caminho.
-- Se a classificação for 'INTERCORRÊNCIA/EXTRAVIO', informe que houve uma intercorrência no fluxo de entrega, peça desculpas e informe que a equipe de logística está investigando o caso ativamente para resolver.
-- Se a classificação for 'DEVOLVIDO/FALHA', informe explicitamente que houve um problema/falha na tentativa de entrega (ou que foi devolvido/cancelado/recusado), peça desculpas sinceras e informe que o suporte entrará em contato para organizar o reenvio ou reembolso. NUNCA diga que o pedido está "atrasado" ou "a caminho".
-- Se a classificação for 'ENTREGUE NO PRAZO' ou 'ENTREGUE COM ATRASO', use um tom de celebração confirmando que foi entregue.
+INSTRUÇÕES DE PERSPECTIVA E TOM DE VOZ:
+- **[MENSAGEM PARA O OPERADOR] (Interna - Balão do Chat)**:
+  - Fale na terceira pessoa sobre o cliente (ex: "O pedido do Diego foi entregue no dia 22/06/2026." ou "O valor do pedido do Diego é R$ 699,00.").
+  - Seja extremamente direto, curto e natural, respondendo exatamente à PERGUNTA DO OPERADOR usando as informações logísticas.
+  - NÃO saúde o cliente neste campo (não escreva "Olá Diego").
+- **[MENSAGEM PARA O CLIENTE] (Externa - WhatsApp/E-mail)**:
+  - Fale na segunda pessoa direcionado ao cliente, saudando-o pelo primeiro nome (ex: "Olá Diego, seu pedido...").
+  - Se a pergunta do operador for específica (ex: qual o valor, qual a previsão), a mensagem para o cliente deve ser um aviso polido e contextualizado sobre aquela informação específica (ex: "Olá Diego, o valor do seu pedido FCN-1638871095971-01 é R$ 699,00.").
+  - Se a pergunta do operador for ampla (ex: qual o status), siga a classificação padrão:
+    - 'EM TRÂNSITO NO PRAZO': aviso animador de que o pedido está a caminho.
+    - 'EM TRÂNSITO COM ATRASO': desculpas formais e aviso de que está a caminho.
+    - 'INTERCORRÊNCIA/EXTRAVIO': aviso de intercorrência, desculpas e que a logística está investigando.
+    - 'DEVOLVIDO/FALHA': aviso de falha na entrega, desculpas e que o suporte fará contato para reembolso/reenvio.
+    - 'ENTREGUE NO PRAZO' ou 'ENTREGUE COM ATRASO': confirmação de entrega com sucesso.
 
 ATENÇÃO AO MOTIVO DO PROBLEMA (Descrição Transportador ou Motivo Recusa):
-- Se os dados indicarem que houve uma Recusa inicial (campo 'Motivo Recusa' presente) mas o status atual no transportador é 'Entregue' ou 'Em Trânsito': você DEVE colocar a recusa no campo 'Detalhe Status' (Ex: "Recusado inicialmente por SEM ESTOQUE") e relatar todo o ocorrido de forma explicativa no 'Raciocínio' (Ex: "Pedido recusado inicialmente pelo seller X por falta de estoque, mas faturado posteriormente por outro seller e entregue em DD/MM/YYYY").
-- Se for entrega normal, o campo 'Descrição Transportador' contém o detalhamento da ocorrência. Se o campo for nulo ou vazio e não houver recusa, trate-o apenas como um problema geral.
+- Se os dados indicarem que houve uma Recusa inicial (campo 'Motivo Recusa' presente) mas o status atual no transportador é 'Entregue' ou 'Em Trânsito': você DEVE colocar a recusa no campo 'Detalhe Status' (Ex: "Recusado inicialmente por SEM ESTOQUE") e relatar todo o ocorrido no 'Raciocínio'.
 
-Não utilize emojis em hipótese alguma. Importante: utilize apenas o PRIMEIRO NOME do cliente ao saudá-lo na mensagem (ex: se o nome for 'LUIS FELIPE BECK GIARDULLO', escreva apenas 'Luis' com inicial maiúscula; se for 'MARIA DA SILVA', escreva 'Maria').
+Não utilize emojis em hipótese alguma. Utilize apenas o PRIMEIRO NOME do cliente ao saudá-lo na [MENSAGEM PARA O CLIENTE] (ex: se o nome for 'DIEGO BEZERRA DE SANTANA', escreva apenas 'Diego').
 
 FORMATE SUA RESPOSTA EXATAMENTE ASSIM (NÃO altere o cabeçalho das tags e substitua apenas o texto):
 ---
 [CLASSIFICAÇÃO]: {classificacao_sistema}
-[ANÁLISE INTERNA]: Pedido: (Número do Pedido de Venda/Pedido) | Transportadora/Seller: (Nome da Transportadora ou Conta/Seller) | Previsão: (Previsão de Entrega Cliente, caso indisponível use a Data do Pedido ou 'N/A') | Status Atual: (Status Transportador, ou se for recusa sem faturamento use 'Recusado') | Detalhe Status: (Descrição Transportador ou 'Recusado inicialmente por [Motivo Recusa]' se houver recusa, caso contrário informe "N/A") | Raciocínio: (Resumo em 1 linha detalhando todo o fluxo de forma explicativa para a equipe de logística, ex: detalhando a recusa inicial por falta de estoque e o faturamento/entrega posterior)
+[ANÁLISE INTERNA]: Pedido: (Número do Pedido de Venda/Pedido) | Transportadora/Seller: (Nome da Transportadora ou Conta/Seller) | Previsão: (Previsão de Entrega Cliente, caso indisponível use 'N/A') | Status Atual: (Status Transportador) | Detalhe Status: (Descrição Transportador ou 'Recusado inicialmente por [Motivo Recusa]', caso contrário informe "N/A") | Raciocínio: (Resumo em 1 linha detalhando todo o fluxo de forma explicativa para a equipe de logística)
+
+[MENSAGEM PARA O OPERADOR]:
+escreva aqui a resposta natural para o operador em 3a pessoa (ex: "O valor do pedido do cliente Diego é R$ 699,00.")
 
 [MENSAGEM PARA O CLIENTE]:
-escreva aqui a mensagem final de WhatsApp sem usar nenhum emoji
+escreva aqui a mensagem polida de suporte direcionada ao cliente em 2a pessoa (ex: "Olá Diego, o valor do seu pedido FCN-1638871095971-01 é R$ 699,00.")
 ---
 
 Sua resposta final:"""
@@ -54,7 +69,7 @@ Sua resposta final:"""
 prompt = PromptTemplate.from_template(template_atendimento)
 chain_analista = prompt | llm
 
-def gerar_mensagem_atendimento(dados: dict, classificacao_sistema: str, model_name="openai/gpt-oss-20b"):
+def gerar_mensagem_atendimento(dados: dict, classificacao_sistema: str, pergunta_usuario: str = "Qual o status do pedido?", model_name="openai/gpt-oss-20b"):
     if "llama-3.1-8b" in model_name:
         model_name = "openai/gpt-oss-20b"
     elif "llama-3.3-70b" in model_name:
@@ -71,7 +86,8 @@ def gerar_mensagem_atendimento(dados: dict, classificacao_sistema: str, model_na
     
     resposta = local_chain.invoke({
         "dados_pedido": dados_str,
-        "classificacao_sistema": classificacao_sistema
+        "classificacao_sistema": classificacao_sistema,
+        "pergunta_usuario": pergunta_usuario
     })
     return resposta.content
 
