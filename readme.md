@@ -341,16 +341,16 @@ Este cenário demonstra o funcionamento do **Guardrail de Ambiguidade**. Quando 
 
 
 9. **Seleção Definitiva e Atendimento (Operador):**
-   O operador digita o ID exato do pedido desejado:
-   > *"Como está o status de entrega do pedido FCN-1636691091549-01? Considere hoje como sendo 2026-06-15."*
+   O operador digita o nome completo para a busca final exata:
+   > *"THIAGO FERNANDES DA SILVA MONTEIRO"*
 
 10. **Query SQL Direta Gerada pelo Agente SQL (GPT-OSS 120B):**
     ```sql
-    SELECT r.*, p.*, rec.*
+    SELECT r.*, sr."Data Hora Recusa", sr."Motivo Recusa", sr."Descrição Produto - Cor"
     FROM rastreio_intelipost r
-    LEFT JOIN sintese_pedidos p ON p."Pedido" = r."Pedido de Venda"
-    LEFT JOIN sintese_recusas rec ON rec."Pedido" = r."Pedido de Venda"
-    WHERE r."Pedido de Venda" = 'FCN-1636691091549-01';
+    JOIN sintese_pedidos sp ON r."Pedido" = sp."Pedido"
+    LEFT JOIN sintese_recusas sr ON r."Pedido" = sr."Pedido"
+    WHERE sp."Cliente" LIKE '%Thiago Fernandes da Silva Monteiro%';
     ```
     *(Visualização real do query de busca exata por ID):*
     ![Busca Direta por ID do Pedido](Ambiguidade_6.png)
@@ -360,20 +360,16 @@ Este cenário demonstra o funcionamento do **Guardrail de Ambiguidade**. Quando 
     ```json
     [
       {
-        "Nome do Destinatário": "THIAGO FERNANDES",
+        "Nome do Destinatário": "THIAGO FERNANDES DA SILVA MONTEIRO",
         "Canal de Vendas": "Site",
-        "Cidade do Destinatário": "UBERLANDIA",
-        "UF": "MG",
-        "CEP do destinatário": "38405-140",
-        "Pedido de Venda": "FCN-1636691091549-01",
-        "Pedido": "FCN-1636691091549-01",
-        "Código de rastreio": "888030745062132",
+        "Cidade do Destinatário": "RIO DE JANEIRO",
+        "UF": "RJ",
+        "CEP do destinatário": "22793-081",
+        "Pedido de Venda": "FCN-1638891096057-02",
+        "Pedido": "FCN-1638891096057-02",
+        "Código de rastreio": "888030761956203",
         "Transportadora": "J&T Express",
-        "Status Transportador": "Entregue",
-        "Data Entrega": "2026-06-08 18:23:00",
-        "Previsão Entrega Cliente": "2026-06-15 23:59:59",
-        "e-mail Destinatário": "th***es@gmail.com",
-        "Celular Destinatário": "+55 34 9****-**16"
+        "Status Transportador": "Entregue"
       }
     ]
     ```
@@ -382,10 +378,10 @@ Este cenário demonstra o funcionamento do **Guardrail de Ambiguidade**. Quando 
     ```text
     ---
     [CLASSIFICAÇÃO]: ENTREGUE NO PRAZO
-    [ANÁLISE INTERNA]: Pedido: FCN-1636691091549-01 | Transportadora/Seller: J&T Express | Previsão: 2026-06-15 | Status Atual: Entregue | Detalhe Status: N/A | Raciocínio: O pedido foi entregue com sucesso dentro do prazo no dia 08/06/2026.
+    [ANÁLISE INTERNA]: Pedido: FCN-1638891096057-02 | Transportadora/Seller: J&T Express | Previsão: 2026-06-18 23:59:59 | Status Atual: Entregue | Detalhe Status: FCN-1638891096057-02outros2026-06-15 21:28:04Edilson ferreiranao se identificou | Raciocínio: Pedido entregue com sucesso pela J&T Express em 15/06/2026, dentro do prazo previsto.
     
     [MENSAGEM PARA O CLIENTE]:
-    Olá Thiago, gostaríamos de confirmar que o seu pedido foi entregue com sucesso no dia 08/06/2026. Agradecemos a sua preferência e esperamos que tenha gostado da sua experiência de compra.
+    Olá Thiago, seu pedido FCN-1638891096057-02 foi entregue com sucesso em 15 de junho de 2026. Agradecemos por escolher nossa loja e esperamos que aproveite sua compra. Se precisar de algo, estamos à disposição.
     ---
     ```
     *(Visualização real da análise interna do Analista e dos canais simulados disparados):*
@@ -463,42 +459,47 @@ Este cenário demonstra a robustez da **Memória de Curto Prazo (Conversational 
 
 1. **Primeira Pergunta do Histórico (Operador):**
    > *"Qual o valor do pedido FCN-1638871095971-01?"*
-   * *(A IA responde apenas sobre o valor financeiro na terceira pessoa: "O valor do pedido do cliente Diego de número FCN-1638871095971-01 é R$ 699,00." - Sem revelar qualquer informação ou log sobre o status de entrega do mesmo).*
+   * *(A IA responde apenas sobre o valor do pedido na terceira pessoa para o operador: "O valor do pedido do cliente Diego é R$ 699,00." - Sem revelar o status logístico da entrega).*
 
-2. **Segunda Pergunta (Referência Ambígua por Elipse/Subentendido):**
-   > *"O pedido foi entregue?"*
+2. **Segunda Pergunta (Referência Ambígua com Pronome/Contexto):**
+   > *"O pedido foi entregue quando?"*
 
 3. **Etapa de Reescrita de Pergunta (Código Python em `integracao.py`):**
    O pipeline intercepta a entrada, passa o histórico da conversa pelo modelo de reescrita conversacional e resolve a ambiguidade transformando a pergunta vaga em uma consulta direta independente:
-   - **Pergunta Reescrevida pelo Agente:** *"O pedido FCN-1638871095971-01 foi entregue?"*
+   - **Pergunta Reescrevida pelo Agente:** *"O pedido FCN-1638871095971-01 foi entregue quando?"*
 
 4. **Query SQL Gerada pelo Agente SQL (GPT-OSS 120B):**
    ```sql
-   SELECT "Status Transportador", "Data Entrega" 
-   FROM "rastreio_intelipost" 
-   WHERE "Pedido de Venda" = 'FCN-1638871095971-01';
+   SELECT r.*, rc."Data Hora Recusa", rc."Motivo Recusa", rc."Descrição Produto - Cor"
+   FROM rastreio_intelipost r
+   LEFT JOIN sintese_recusas rc ON rc."Pedido" = r."Pedido"
+   WHERE r."Pedido de Venda" = 'FCN-1638871095971-01';
    ```
 
 5. **Dados Brutos Retornados (Formato JSON SQLite):**
    ```json
    [
      {
+       "Nome do Destinatário": "DIEGO BEZERRA DE SANTANA",
+       "Pedido de Venda": "FCN-1638871095971-01",
+       "Pedido": "FCN-1638871095971-01",
        "Status Transportador": "Entregue",
-       "Data Entrega": "2026-06-22 15:15:06"
+       "Data Entrega": "2026-06-22 15:15:06",
+       "Previsão Entrega Cliente": "2026-06-24 23:59:59"
      }
    ]
    ```
 
 6. **Resposta Final do Agente no Chat (Voltada ao Operador):**
-   > *"O pedido do Diego de número FCN-1638871095971-01 foi entregue em 22/06/2026."*
+   > *"O pedido do Diego foi entregue no dia 22/06/2026."*
    
-   *(Visualização real da sequência de execução em 5 partes continuas):*
+   *(Visualização real da sequência de execução em 5 partes contínuas):*
    
    **Turno 1: Consulta de valor do pedido**
    ![Primeira Pergunta e Contexto](Memoria_1.png)
    ![Logs e Alerta da Primeira Pergunta](Memoria_2.png)
    
-   **Turno 2: Pergunta subsequente com pronome ("Ele já foi entregue?")**
+   **Turno 2: Pergunta subsequente ("O pedido foi entregue quando?")**
    ![Segunda Pergunta e Contexto](Memoria_3.png)
    ![Disparo Omnichannel WhatsApp e E-mail da Segunda Pergunta](Memoria_4.png)
    ![Logs de Auditoria e Alerta no Slack da Segunda Pergunta](Memoria_5.png)
