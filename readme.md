@@ -505,67 +505,7 @@ Este cenário demonstra a robustez da **Memória de Curto Prazo (Conversational 
    ![Logs de Auditoria e Alerta no Slack da Segunda Pergunta](Memoria_5.png)
 ---
 
-#### 3.5 Interface do Painel Streamlit (Screenshots)
-
-Para facilitar a auditoria visual da interface de negócios, adicione aqui os screenshots do seu ambiente de execução:
-
-* **Interface Principal e Query SQL Extraída em Tempo Real (Etapa 1):**
-  ![Interface Principal e Query SQL](chatbot_3.png)
-
-* **Interação Conversacional em Tempo Real e Logs dos Agentes (SQL e Analista):**
-  ![Interação Conversacional em Tempo Real](chatbot_1.png)
-
-* **Canais Omnichannel Disparados Simulações (WhatsApp, E-mail e Slack):**
-  ![Canais Omnichannel Disparados](chatbot_2.png)
-
-* **Demonstração do Guardrail de Ambiguidade - Turno 1: Busca Inicial por "Thiago" (Exemplo 2):**
-  ![Busca Ampla com Ambiguidade](Ambiguidade_1.png)
-
-* **Demonstração do Guardrail de Ambiguidade - Turno 1: Resultado de 77 Pedidos (Exemplo 2):**
-  ![Resultado Ambiguidade 77 Pedidos](Ambiguidade_2.png)
-
-* **Demonstração do Guardrail de Ambiguidade - Turno 1: Logs Internos no Alerta do Slack (Exemplo 2):**
-  ![Logs Internos Slack Ambiguidade](Ambiguidade_3.png)
-
-* **Demonstração do Guardrail de Ambiguidade - Turno 2: Busca por "Thiago Fernandes" (Exemplo 2):**
-  ![Busca Refinada Thiago Fernandes](Ambiguidade_4.png)
-
-* **Demonstração do Guardrail de Ambiguidade - Turno 2: Resultado de 2 Pedidos (Exemplo 2):**
-  ![Resultado Ambiguidade 2 Pedidos](Ambiguidade_5.png)
-* **Demonstração do Guardrail de Ambiguidade - Turno 3: Busca por ID "FCN-1636691091549-01" (Exemplo 2):**
-  ![Busca Direta por ID do Pedido](Ambiguidade_6.png)
-
-* **Demonstração do Guardrail de Ambiguidade - Turno 3: Logs da Resposta do Analista (Exemplo 2):**
-  ![Logs Analista Thiago Fernandes](Ambiguidade_7.png)
-
-* **Demonstração do Guardrail de Ambiguidade - Turno 3: Canais WhatsApp e E-mail Disparados (Exemplo 2):**
-  ![Disparos Omnichannel Thiago Fernandes](Ambiguidade_8.png)
-
-* **Integração de Recusa e Entrega (Exemplo 3) - Query SQL com Join de Recusas (Etapa 1):**
-  ![Query SQL de Recusas e Entrega](Recusas_1.png)
-
-* **Integração de Recusa e Entrega (Exemplo 3) - Análise de Negócio e CoT (Etapa 2):**
-  ![Análise de Negócio do Analista](Recusas_2.png)
-
-* **Integração de Recusa e Entrega (Exemplo 3) - Confirmação de Entrega Enviada (WhatsApp/E-mail):**
-  ![Disparos Omnichannel Exemplo Recusa](Recusas_3.png)
-
-* **Resolução Conversacional de Memória e Pronomes (Exemplo 4) - Turno 1 (Parte 1 - Chat):**
-  ![Primeira Pergunta da Conversa](Memoria_1.png)
-
-* **Resolução Conversacional de Memória e Pronomes (Exemplo 4) - Turno 1 (Parte 2 - Logs):**
-  ![Logs Internos Turno 1](Memoria_2.png)
-
-* **Resolução Conversacional de Memória e Pronomes (Exemplo 4) - Turno 2 (Parte 1 - Reescrita e Chat):**
-  ![Reescrita e Resposta com Pronome](Memoria_3.png)
-
-* **Resolução Conversacional de Memória e Pronomes (Exemplo 4) - Turno 2 (Parte 2 - Canais Cliente):**
-  ![WhatsApp e Email Turno 2](Memoria_4.png)
-
-* **Resolução Conversacional de Memória e Pronomes (Exemplo 4) - Turno 2 (Parte 3 - Slack):**
-  ![Slack Logs Turno 2](Memoria_5.png)
-
-#### 3.6 Definição das Regras e Prompts do Sistema
+#### 3.5 Definição das Regras e Prompts do Sistema
 
 A integridade sintática e a robustez dos agentes foram garantidas por meio de prompts estruturados em formato Chain-of-Thought (CoT), detalhados a seguir:
 
